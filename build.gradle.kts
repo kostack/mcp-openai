@@ -167,7 +167,7 @@ mavenPublishing {
 
   coordinates(
     groupId = group.toString(),
-    artifactId = "mcp-open-ai",
+    artifactId = "mcp-openai",
     version = version.toString()
   )
 

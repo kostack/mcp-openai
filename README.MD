@@ -26,7 +26,7 @@ Add the package to your application.
 
 ```kotlin
 dependencies {
-  implementation("io.github.kostack:mcp-open-ai:1.0.0")
+  implementation("io.github.kostack:mcp-openai:1.0.0")
 }
 ```
 
