@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: mcp
+  freemarker:
+    template-loader-path: classpath:/templates/
+    charset: UTF-8
+    prefer-file-system-access: false
+
+kostack-mcp:
+  api-key: ${API_KEY}
+  enable-audio: true
