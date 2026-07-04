@@ -6,11 +6,9 @@ import io.github.kostack.mcp_openai.dto.RealtimeItem
 import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
 import io.github.kostack.mcp_openai.service.ConversationStore
-import org.springframework.stereotype.Component
 import kotlin.collections.firstOrNull
 import kotlin.collections.orEmpty
 
-@Component
 class ConversationListener(
   private val conversationStore: ConversationStore
 ) {

@@ -1,9 +1,7 @@
 package io.github.kostack.mcp_openai.service
 
-import org.springframework.stereotype.Component
 import java.util.concurrent.ConcurrentHashMap
 
-@Component
 class ConversationStore {
   private val sessions = ConcurrentHashMap<String, MutableList<Map<String, Any>>>()
   private val seenItems = ConcurrentHashMap<String, MutableSet<String>>()

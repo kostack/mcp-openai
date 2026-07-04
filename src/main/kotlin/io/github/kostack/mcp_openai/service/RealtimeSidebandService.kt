@@ -22,14 +22,12 @@ import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.reactor.mono
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.socket.WebSocketSession
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
 import org.springframework.web.util.UriComponentsBuilder
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
 
-@Service
 class RealtimeSidebandService(
   private val mcpProperties: McpProperties,
   private val objectMapper: ObjectMapper,

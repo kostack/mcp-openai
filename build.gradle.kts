@@ -34,30 +34,31 @@ dependencyManagement {
 }
 
 dependencies {
+  // API
+  api("org.springframework.boot:spring-boot-starter-webflux")
+  api("io.github.kostack:event-dispatcher:1.2.2")
+
+  api(platform("org.springframework.ai:spring-ai-bom:2.0.0"))
+  api("org.springframework.ai:spring-ai-model")
+
   // Kotlin
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
-  implementation("org.springframework.boot:spring-boot-starter-webflux")
-  implementation("org.springframework.boot:spring-boot-configuration-processor")
-
-  implementation("io.github.kostack:event-dispatcher:1.2.0")
-
-  // AI related
-  implementation(platform("org.springframework.ai:spring-ai-bom:2.0.0"))
-  implementation("org.springframework.ai:spring-ai-client-chat")
-  implementation("org.springframework.ai:spring-ai-model")
-
-  testImplementation("org.springframework.boot:spring-boot-starter-test")
+  // TestRuntimeOnly
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+  // TestImplementation
+  testImplementation("org.springframework.boot:spring-boot-starter-test")
   testImplementation("com.ninja-squad:springmockk:5.0.1")
   testImplementation("io.mockk:mockk:1.14.11")
   testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
-  testFixturesImplementation(kotlin("stdlib"))
   testImplementation(kotlin("test"))
   testImplementation("io.projectreactor:reactor-test")
 
+  // TestFixtures
+  testFixturesImplementation(kotlin("stdlib"))
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-webflux")
   testFixturesImplementation("org.springframework.boot:spring-boot-autoconfigure")
   testFixturesImplementation("org.springframework.boot:spring-boot-configuration-processor")
@@ -65,10 +66,9 @@ dependencies {
   testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
   testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
   testFixturesImplementation(platform("org.springframework.ai:spring-ai-bom:2.0.0"))
-  testFixturesImplementation("org.springframework.ai:spring-ai-client-chat")
   testFixturesImplementation("org.springframework.ai:spring-ai-model")
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-freemarker")
-  testFixturesImplementation("io.github.kostack:event-dispatcher:1.2.0")
+  testFixturesImplementation("io.github.kostack:event-dispatcher:1.2.2")
 }
 
 kotlin {

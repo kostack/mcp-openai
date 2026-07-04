@@ -12,12 +12,10 @@ import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
 import io.github.kostack.mcp_openai.service.OpenAiHttpService
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
-import org.springframework.stereotype.Component
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.bodyValueAndAwait
 import org.springframework.web.reactive.function.server.buildAndAwait
 
-@Component
 class RealtimeSidebandHandler(
   private val sidebandService: RealtimeSidebandService,
   private val openAiHttpService: OpenAiHttpService,

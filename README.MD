@@ -26,14 +26,14 @@ Add the package to your application.
 
 ```kotlin
 dependencies {
-  implementation("io.github.kostack:mcp-openai:1.0.0")
+  implementation("io.github.kostack:mcp-openai:<version>")
 }
 ```
 
 ## Spring Boot Setup
 
-Make sure Spring scans the package components. The package registers
-`McpProperties` from its own configuration.
+Add the dependency and let Spring Boot auto-configuration register the package.
+Your application does not need to scan `io.github.kostack.mcp_openai`.
 
 ```kotlin
 package com.example.demo
@@ -41,12 +41,7 @@ package com.example.demo
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
-@SpringBootApplication(
-  scanBasePackages = [
-    "com.example.demo",
-    "io.github.kostack.mcp_open_ai"
-  ]
-)
+@SpringBootApplication
 class DemoApplication
 
 fun main(args: Array<String>) {
@@ -54,14 +49,16 @@ fun main(args: Array<String>) {
 }
 ```
 
-Register a `WebClient` bean if your application does not already have one.
+The package creates a default `WebClient` when your application does not
+already provide one. Register your own `WebClient` bean only when you need
+custom HTTP client settings.
 
 ```kotlin
 package com.example.demo
 
+import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.web.reactive.function.client.WebClient
 
 @Configuration
 class HttpConfiguration {
@@ -150,11 +147,11 @@ Implement a Spring component that extends `AbstractTool`.
 ```kotlin
 package com.example.demo.tools
 
-import io.github.kostack.mcp_open_ai.dto.ToolContext
-import io.github.kostack.mcp_open_ai.dto.ToolDefinition
-import io.github.kostack.mcp_open_ai.dto.ToolResult
-import io.github.kostack.mcp_open_ai.tool.AbstractTool
-import io.github.kostack.mcp_open_ai.utils.ToolSchemaUtils
+import io.github.kostack.mcp_openai.dto.ToolContext
+import io.github.kostack.mcp_openai.dto.ToolDefinition
+import io.github.kostack.mcp_openai.dto.ToolResult
+import io.github.kostack.mcp_openai.tool.AbstractTool
+import io.github.kostack.mcp_openai.utils.ToolSchemaUtils
 import org.springframework.stereotype.Component
 
 @Component
@@ -191,9 +188,9 @@ When OpenAI calls `get_weather`, the package decodes the JSON arguments into
 
 ## Backend Routes
 
-The package provides a default `SidebandConfigurationRouter` when Spring scans
-`io.github.kostack.mcp_open_ai`. The default routes use
-`kostack-mcp.sideband-prefix`, which is `/api/realtime` by default:
+The package auto-configures a default `SidebandConfigurationRouter`. The
+default routes use `kostack-mcp.sideband-prefix`, which is `/api/realtime` by
+default:
 
 - `POST /api/realtime/token`
 - `POST /api/realtime/connect`
@@ -400,10 +397,10 @@ Register suspend listeners with `@SuspendListener`.
 package com.example.demo
 
 import io.github.kostack.event_dispatcher.SuspendListener
-import io.github.kostack.mcp_open_ai.RealtimeEvents
-import io.github.kostack.mcp_open_ai.event.RealtimeConnectEvent
-import io.github.kostack.mcp_open_ai.event.RealtimeHandlerEvent
-import io.github.kostack.mcp_open_ai.event.RealtimeTokenPreCreateEvent
+import io.github.kostack.mcp_openai.RealtimeEvents
+import io.github.kostack.mcp_openai.event.RealtimeConnectEvent
+import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
+import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
 import org.springframework.stereotype.Component
 
 @Component
@@ -509,7 +506,7 @@ You can test tools without opening a Realtime session.
 ```kotlin
 package com.example.demo.tools
 
-import io.github.kostack.mcp_open_ai.dto.ToolContext
+import io.github.kostack.mcp_openai.dto.ToolContext
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -539,31 +536,17 @@ class WeatherToolTest {
 package com.example.demo
 
 import io.github.kostack.event_dispatcher.SuspendListener
-import io.github.kostack.mcp_open_ai.RealtimeEvents
-import io.github.kostack.mcp_open_ai.event.RealtimeTokenPreCreateEvent
+import io.github.kostack.mcp_openai.RealtimeEvents
+import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
-import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.stereotype.Component
 
-@SpringBootApplication(
-  scanBasePackages = [
-    "com.example.demo",
-    "io.github.kostack.mcp_open_ai"
-  ]
-)
+@SpringBootApplication
 class DemoApplication
 
 fun main(args: Array<String>) {
   runApplication<DemoApplication>(*args)
-}
-
-@Configuration
-class DemoConfiguration {
-  @Bean
-  fun webClient(): WebClient = WebClient.create()
 }
 
 @Component

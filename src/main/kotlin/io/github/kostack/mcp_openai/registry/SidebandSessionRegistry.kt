@@ -1,10 +1,8 @@
 package io.github.kostack.mcp_openai.registry
 
 import kotlinx.coroutines.Job
-import org.springframework.stereotype.Component
 import java.util.concurrent.ConcurrentHashMap
 
-@Component
 class SidebandSessionRegistry {
   private val sessions = ConcurrentHashMap<String, Job>()
 
@@ -15,10 +13,6 @@ class SidebandSessionRegistry {
 
   fun cancel(callId: String) {
     sessions.remove(callId)?.cancel()
-  }
-
-  fun remove(callId: String) {
-    sessions.remove(callId)
   }
 
   fun remove(

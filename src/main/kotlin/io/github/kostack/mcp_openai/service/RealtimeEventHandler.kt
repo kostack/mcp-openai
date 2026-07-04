@@ -10,10 +10,8 @@ import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
 
-@Component
 class RealtimeEventHandler(
   private val objectMapper: ObjectMapper,
   private val toolDispatcher: ToolDispatcher,

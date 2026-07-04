@@ -6,11 +6,9 @@ import io.github.kostack.mcp_openai.dto.ToolDefinition
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.awaitBody
 
-@Service
 class OpenAiHttpService(
   private val webClient: WebClient,
   private val mcpProperties: McpProperties
