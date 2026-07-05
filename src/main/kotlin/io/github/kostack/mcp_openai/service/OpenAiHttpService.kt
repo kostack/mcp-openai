@@ -1,6 +1,6 @@
 package io.github.kostack.mcp_openai.service
 
-import io.github.kostack.mcp_openai.configuration.McpProperties
+import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.RealtimeTokenResponse
 import io.github.kostack.mcp_openai.dto.ToolDefinition
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
