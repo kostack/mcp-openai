@@ -1,4 +1,4 @@
-package io.github.kostack.mcp_openai.configuration
+package io.github.kostack.mcp_openai.autoconfiguration
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeSidebandHandler

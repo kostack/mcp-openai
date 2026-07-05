@@ -81,27 +81,25 @@ tasks.withType<Test> {
   useJUnitPlatform()
 }
 
-val installGitHook =
-  tasks.register("installGitHook") {
-    group = "build setup"
-    description = "Installs a git pre-commit hook to enforce formatting rules"
-    doLast {
-      val hookSource = file("scripts/pre-commit")
-      val hookTarget = file(".git/hooks/pre-commit")
-      if (!hookTarget.exists()) {
-        hookSource.copyTo(hookTarget, overwrite = false)
-      }
-      hookTarget.setExecutable(true)
-    }
-  }
+tasks.register("installGitHook") {
+  group = "build setup"
+  description = "Installs a git pre-commit hook to enforce formatting rules"
+  doLast {
+    val hookSource = file("scripts/pre-commit")
+    val hooksDir = file(".git/hooks")
+    val hookTarget = hooksDir.resolve("pre-commit")
+    check(hookSource.isFile) { "Git hook source not found: ${hookSource.path}" }
+    check(hooksDir.isDirectory) { "Git hooks directory not found: ${hooksDir.path}" }
 
-tasks.named("assemble") {
-  dependsOn(installGitHook)
+    if (!hookTarget.exists()) {
+      hookSource.copyTo(hookTarget, overwrite = false)
+    }
+    hookTarget.setExecutable(true)
+  }
 }
 
 tasks.named<Test>("test") {
   useJUnitPlatform()
-  dependsOn(installGitHook)
 
   finalizedBy(tasks.named("jacocoTestReport"))
   reports.junitXml.required.set(true)

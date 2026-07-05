@@ -1,4 +1,4 @@
-package io.github.kostack.mcp_openai.configuration
+package io.github.kostack.mcp_openai.autoconfiguration
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 

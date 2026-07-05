@@ -2,7 +2,7 @@ package io.github.kostack.mcp_openai.service
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeEvents
-import io.github.kostack.mcp_openai.configuration.McpProperties
+import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.RealtimeEvent
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
