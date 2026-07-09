@@ -10,7 +10,6 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
-import io.mockk.unmockkConstructor
 import io.mockk.verify
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -21,11 +20,10 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketHandler
-import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
+import org.springframework.web.reactive.socket.client.WebSocketClient
 import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
-import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -38,15 +36,11 @@ class RealtimeSidebandServiceTest {
   private val realtimeEventHandler = mockk<RealtimeEventHandler>(relaxed = true)
   private val suspendDispatcher = mockk<SuspendDispatcher>(relaxed = true)
   private val objectMapper = mockk<ObjectMapper>(relaxed = true)
+  private val sidebandWebSocketClient = mockk<WebSocketClient>()
   private val properties =
     McpProperties(
       sidebandUrl = "wss://realtime.example.test/v1/realtime"
     )
-
-  @AfterTest
-  fun tearDown() {
-    unmockkConstructor(ReactorNettyWebSocketClient::class)
-  }
 
   @Test
   fun `connect registers sideband job and opens websocket with call id and bearer token`() =
@@ -70,7 +64,7 @@ class RealtimeSidebandServiceTest {
 
       verify(exactly = 1) { sidebandRegistry.putIfAbsent(request.callId, any()) }
       verify(timeout = 1_000) {
-        anyConstructed<ReactorNettyWebSocketClient>().execute(
+        sidebandWebSocketClient.execute(
           any<URI>(),
           any<HttpHeaders>(),
           any<WebSocketHandler>()
@@ -107,7 +101,7 @@ class RealtimeSidebandServiceTest {
 
       verify(exactly = 1) { sidebandRegistry.putIfAbsent(request.callId, any()) }
       verify(exactly = 0) {
-        anyConstructed<ReactorNettyWebSocketClient>().execute(
+        sidebandWebSocketClient.execute(
           any<URI>(),
           any<HttpHeaders>(),
           any<WebSocketHandler>()
@@ -141,7 +135,7 @@ class RealtimeSidebandServiceTest {
       service().connect(request)
 
       verify(timeout = 1_000) {
-        anyConstructed<ReactorNettyWebSocketClient>().execute(
+        sidebandWebSocketClient.execute(
           any<URI>(),
           any<HttpHeaders>(),
           any<WebSocketHandler>()
@@ -200,9 +194,8 @@ class RealtimeSidebandServiceTest {
     uriSlot: io.mockk.CapturingSlot<URI> = slot(),
     headersSlot: io.mockk.CapturingSlot<HttpHeaders> = slot()
   ) {
-    io.mockk.mockkConstructor(ReactorNettyWebSocketClient::class)
     every {
-      anyConstructed<ReactorNettyWebSocketClient>().execute(
+      sidebandWebSocketClient.execute(
         capture(uriSlot),
         capture(headersSlot),
         any<WebSocketHandler>()
@@ -211,9 +204,8 @@ class RealtimeSidebandServiceTest {
   }
 
   private fun mockWebSocketExecuteFailure(error: Throwable) {
-    io.mockk.mockkConstructor(ReactorNettyWebSocketClient::class)
     every {
-      anyConstructed<ReactorNettyWebSocketClient>().execute(
+      sidebandWebSocketClient.execute(
         any<URI>(),
         any<HttpHeaders>(),
         any<WebSocketHandler>()
@@ -228,6 +220,7 @@ class RealtimeSidebandServiceTest {
       sidebandRegistry = sidebandRegistry,
       sessionRegistry = sessionRegistry,
       realtimeEventHandler = realtimeEventHandler,
-      suspendDispatcher = suspendDispatcher
+      suspendDispatcher = suspendDispatcher,
+      client = sidebandWebSocketClient
     )
 }

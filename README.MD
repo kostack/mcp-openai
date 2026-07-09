@@ -76,6 +76,7 @@ kostack-mcp:
   api-key: ${OPENAI_API_KEY}
   model: gpt-realtime-mini
   transcription-model: gpt-realtime-whisper
+  sideband-max-frame-payload-length: 1048576
   enable-audio: false
 ```
 
@@ -87,6 +88,7 @@ Available properties:
 | `client-secrets-url` | `https://api.openai.com/v1/realtime/client_secrets` | OpenAI endpoint used to create ephemeral Realtime client secrets. |
 | `sideband-url` | `wss://api.openai.com/v1/realtime` | OpenAI sideband WebSocket endpoint. |
 | `sideband-prefix` | `/api/realtime` | Prefix for the built-in Realtime HTTP routes. |
+| `sideband-max-frame-payload-length` | `1048576` | Maximum inbound sideband WebSocket frame payload length in bytes. Increase this if large Realtime events exceed the default. |
 | `model` | `gpt-realtime-mini` | Realtime model used when creating a session. |
 | `transcription-model` | `gpt-realtime-whisper` | Audio transcription model used for input audio. |
 | `enable-audio` | `false` | Application-level flag you can use when deciding whether to allow audio requests. |

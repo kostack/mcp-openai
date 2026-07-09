@@ -16,6 +16,8 @@ import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
+import org.springframework.web.reactive.socket.client.WebSocketClient
 import tools.jackson.databind.ObjectMapper
 
 class McpOpenAiAutoConfigurationTest {
@@ -31,6 +33,8 @@ class McpOpenAiAutoConfigurationTest {
   fun `auto configuration registers package beans without component scanning package`() {
     contextRunner.run { context ->
       assertThat(context).hasSingleBean(McpProperties::class.java)
+      assertThat(context).hasBean("realtimeSidebandWebSocketClient")
+      assertThat(context).hasSingleBean(WebSocketClient::class.java)
       assertThat(context).hasSingleBean(SidebandSessionRegistry::class.java)
       assertThat(context).hasSingleBean(WebSocketSessionRegistry::class.java)
       assertThat(context).hasSingleBean(ConversationStore::class.java)
@@ -41,6 +45,9 @@ class McpOpenAiAutoConfigurationTest {
       assertThat(context).hasSingleBean(RealtimeSidebandHandler::class.java)
       assertThat(context).hasSingleBean(ConversationListener::class.java)
       assertThat(context).hasBean("realtimeSidebandRoutes")
+
+      val sidebandClient = context.getBean("realtimeSidebandWebSocketClient", ReactorNettyWebSocketClient::class.java)
+      assertThat(sidebandClient.websocketClientSpec.maxFramePayloadLength()).isEqualTo(1024 * 1024)
     }
   }
 

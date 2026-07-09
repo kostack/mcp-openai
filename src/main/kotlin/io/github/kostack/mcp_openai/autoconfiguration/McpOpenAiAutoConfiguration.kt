@@ -15,6 +15,7 @@ import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.Tool
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfigureBefore
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -25,6 +26,10 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.server.CoRouterFunctionDsl
 import org.springframework.web.reactive.function.server.awaitBody
 import org.springframework.web.reactive.function.server.coRouter
+import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
+import org.springframework.web.reactive.socket.client.WebSocketClient
+import reactor.netty.http.client.HttpClient
+import reactor.netty.http.client.WebsocketClientSpec
 import tools.jackson.databind.ObjectMapper
 
 @AutoConfiguration
@@ -38,31 +43,42 @@ class McpOpenAiAutoConfiguration {
     builder.ifAvailable?.build() ?: WebClient.create()
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["realtimeSidebandWebSocketClient"])
+  fun realtimeSidebandWebSocketClient(mcpProperties: McpProperties): WebSocketClient =
+    ReactorNettyWebSocketClient(
+      HttpClient.create()
+    ) {
+      WebsocketClientSpec
+        .builder()
+        .maxFramePayloadLength(mcpProperties.sidebandMaxFramePayloadLength)
+    }
+
+  @Bean
+  @ConditionalOnMissingBean(name = ["sidebandSessionRegistry"])
   fun sidebandSessionRegistry(): SidebandSessionRegistry = SidebandSessionRegistry()
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["webSocketSessionRegistry"])
   fun webSocketSessionRegistry(objectMapper: ObjectMapper): WebSocketSessionRegistry =
     WebSocketSessionRegistry(objectMapper)
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["conversationStore"])
   fun conversationStore(): ConversationStore = ConversationStore()
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["toolDispatcher"])
   fun toolDispatcher(tools: List<Tool>): ToolDispatcher = ToolDispatcher(tools)
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["openAiHttpService"])
   fun openAiHttpService(
     webClient: WebClient,
     mcpProperties: McpProperties
   ): OpenAiHttpService = OpenAiHttpService(webClient, mcpProperties)
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["realtimeEventHandler"])
   fun realtimeEventHandler(
     objectMapper: ObjectMapper,
     toolDispatcher: ToolDispatcher,
@@ -77,14 +93,15 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["realtimeSidebandService"])
   fun realtimeSidebandService(
     mcpProperties: McpProperties,
     objectMapper: ObjectMapper,
     sidebandRegistry: SidebandSessionRegistry,
     sessionRegistry: WebSocketSessionRegistry,
     realtimeEventHandler: RealtimeEventHandler,
-    suspendDispatcher: SuspendDispatcher
+    suspendDispatcher: SuspendDispatcher,
+    @Qualifier("realtimeSidebandWebSocketClient") sidebandWebSocketClient: WebSocketClient
   ): RealtimeSidebandService =
     RealtimeSidebandService(
       mcpProperties,
@@ -92,11 +109,12 @@ class McpOpenAiAutoConfiguration {
       sidebandRegistry,
       sessionRegistry,
       realtimeEventHandler,
-      suspendDispatcher
+      suspendDispatcher,
+      sidebandWebSocketClient
     )
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["realtimeSidebandHandler"])
   fun realtimeSidebandHandler(
     sidebandService: RealtimeSidebandService,
     openAiHttpService: OpenAiHttpService,
@@ -113,12 +131,12 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["conversationListener"])
   fun conversationListener(conversationStore: ConversationStore): ConversationListener =
     ConversationListener(conversationStore)
 
   @Bean
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(name = ["realtimeSidebandRoutes"])
   fun realtimeSidebandRoutes(
     handler: RealtimeSidebandHandler,
     properties: McpProperties

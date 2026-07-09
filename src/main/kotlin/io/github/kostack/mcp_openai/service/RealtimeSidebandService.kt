@@ -23,7 +23,7 @@ import kotlinx.coroutines.reactor.mono
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketSession
-import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
+import org.springframework.web.reactive.socket.client.WebSocketClient
 import org.springframework.web.util.UriComponentsBuilder
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
@@ -34,11 +34,11 @@ class RealtimeSidebandService(
   private val sidebandRegistry: SidebandSessionRegistry,
   private val sessionRegistry: WebSocketSessionRegistry,
   private val realtimeEventHandler: RealtimeEventHandler,
-  private val suspendDispatcher: SuspendDispatcher
+  private val suspendDispatcher: SuspendDispatcher,
+  private val client: WebSocketClient
 ) {
   private val supervisorJob = SupervisorJob()
   private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
-  private val client = ReactorNettyWebSocketClient()
 
   fun connect(request: SidebandConnectRequest) {
     val callId = request.callId
