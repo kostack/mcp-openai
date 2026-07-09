@@ -3,6 +3,7 @@ package io.github.kostack.mcp_openai.service
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.RealtimeTokenResponse
 import io.github.kostack.mcp_openai.dto.ToolDefinition
+import io.github.kostack.mcp_openai.utils.HttpRetryUtils
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -19,20 +20,22 @@ class OpenAiHttpService(
     definitions: List<ToolDefinition>
   ): RealtimeTokenResponse {
     val response =
-      webClient
-        .post()
-        .uri(mcpProperties.clientSecretsUrl)
-        .header(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
-        .contentType(MediaType.APPLICATION_JSON)
-        .bodyValue(
-          RealtimeUtils.createSession(
-            instructions = instructions,
-            language = language,
-            definitions = definitions,
-            properties = mcpProperties
-          )
-        ).retrieve()
-        .awaitBody<Map<String, Any>>()
+      HttpRetryUtils.retryHttpCall {
+        webClient
+          .post()
+          .uri(mcpProperties.clientSecretsUrl)
+          .header(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
+          .contentType(MediaType.APPLICATION_JSON)
+          .bodyValue(
+            RealtimeUtils.createSession(
+              instructions = instructions,
+              language = language,
+              definitions = definitions,
+              properties = mcpProperties
+            )
+          ).retrieve()
+          .awaitBody<Map<String, Any>>()
+      }
 
     val clientSecret =
       ((response["value"] ?: response["client_secret"]) as? String)

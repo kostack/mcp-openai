@@ -110,7 +110,11 @@ class RealtimeSidebandService(
       log.info("Sideband cancelled callId={}", callId)
       throw e
     } catch (e: Exception) {
-      log.error("Sideband failed callId={}, error={}", callId, e.message, e)
+      if (e.isClosedConnectionBeforeSend()) {
+        log.info("Sideband closed before send callId={}", callId)
+      } else {
+        log.error("Sideband failed callId={}, error={}", callId, e.message, e)
+      }
     } finally {
       log.info("Sideband closed callId={}", callId)
       websocketSession?.let { sessionRegistry.remove(callId, it) }
@@ -139,3 +143,9 @@ class RealtimeSidebandService(
     private val log = LoggerFactory.getLogger(RealtimeSidebandService::class.java)
   }
 }
+
+private fun Throwable.isClosedConnectionBeforeSend(): Boolean =
+  generateSequence(this) { it.cause }.any { cause ->
+    cause::class.qualifiedName == "reactor.netty.channel.AbortedException" ||
+      cause.message?.contains("Connection has been closed BEFORE send operation") == true
+  }

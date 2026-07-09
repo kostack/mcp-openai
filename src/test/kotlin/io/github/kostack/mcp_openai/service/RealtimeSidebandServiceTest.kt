@@ -16,6 +16,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.boot.test.system.CapturedOutput
+import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketHandler
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
@@ -25,8 +28,10 @@ import java.net.URI
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+@ExtendWith(OutputCaptureExtension::class)
 class RealtimeSidebandServiceTest {
   private val sidebandRegistry = mockk<SidebandSessionRegistry>(relaxed = true)
   private val sessionRegistry = mockk<WebSocketSessionRegistry>(relaxed = true)
@@ -167,6 +172,30 @@ class RealtimeSidebandServiceTest {
       verify(exactly = 1) { sidebandRegistry.cancel(request.callId) }
     }
 
+  @Test
+  fun `connect does not log sideband failure when connection closes before send`(output: CapturedOutput) =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      val request =
+        SidebandConnectRequest(
+          callId = "call-123",
+          clientSecret = "client-secret",
+          namespace = "crm",
+          channel = "web",
+          language = "en"
+        )
+
+      every { sidebandRegistry.putIfAbsent(request.callId, capture(jobSlot)) } returns null
+      mockWebSocketExecuteFailure(
+        RuntimeException("Connection has been closed BEFORE send operation")
+      )
+
+      service().connect(request)
+      jobSlot.captured.join()
+
+      assertFalse(output.all.contains("Sideband failed callId=call-123"))
+    }
+
   private fun mockWebSocketExecute(
     uriSlot: io.mockk.CapturingSlot<URI> = slot(),
     headersSlot: io.mockk.CapturingSlot<HttpHeaders> = slot()
@@ -179,6 +208,17 @@ class RealtimeSidebandServiceTest {
         any<WebSocketHandler>()
       )
     } returns Mono.never()
+  }
+
+  private fun mockWebSocketExecuteFailure(error: Throwable) {
+    io.mockk.mockkConstructor(ReactorNettyWebSocketClient::class)
+    every {
+      anyConstructed<ReactorNettyWebSocketClient>().execute(
+        any<URI>(),
+        any<HttpHeaders>(),
+        any<WebSocketHandler>()
+      )
+    } returns Mono.error(error)
   }
 
   private fun service(): RealtimeSidebandService =

@@ -119,15 +119,28 @@ class RealtimeEventHandler(
       toolResult.success
     )
 
+    val outputSent =
+      websocketSessionRegistry.sendJson(
+        request.callId,
+        RealtimeUtils.conversationFunctionOutput(
+          toolCallId,
+          objectMapper.writeValueAsString(toolResult)
+        )
+      )
+
+    if (!outputSent) {
+      log.debug(
+        "Skipped response create because sideband session is closed callId={}, toolCallId={}",
+        request.callId,
+        toolCallId
+      )
+      return
+    }
+
     websocketSessionRegistry.sendJson(
       request.callId,
-      RealtimeUtils.conversationFunctionOutput(
-        toolCallId,
-        objectMapper.writeValueAsString(toolResult)
-      )
+      RealtimeUtils.createResponse(request.modality)
     )
-
-    websocketSessionRegistry.sendJson(request.callId, RealtimeUtils.createResponse(request.modality))
   }
 
   companion object {

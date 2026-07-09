@@ -38,9 +38,11 @@ class McpOpenAiAutoConfiguration {
     builder.ifAvailable?.build() ?: WebClient.create()
 
   @Bean
+  @ConditionalOnMissingBean
   fun sidebandSessionRegistry(): SidebandSessionRegistry = SidebandSessionRegistry()
 
   @Bean
+  @ConditionalOnMissingBean
   fun webSocketSessionRegistry(objectMapper: ObjectMapper): WebSocketSessionRegistry =
     WebSocketSessionRegistry(objectMapper)
 
@@ -49,15 +51,18 @@ class McpOpenAiAutoConfiguration {
   fun conversationStore(): ConversationStore = ConversationStore()
 
   @Bean
+  @ConditionalOnMissingBean
   fun toolDispatcher(tools: List<Tool>): ToolDispatcher = ToolDispatcher(tools)
 
   @Bean
+  @ConditionalOnMissingBean
   fun openAiHttpService(
     webClient: WebClient,
     mcpProperties: McpProperties
   ): OpenAiHttpService = OpenAiHttpService(webClient, mcpProperties)
 
   @Bean
+  @ConditionalOnMissingBean
   fun realtimeEventHandler(
     objectMapper: ObjectMapper,
     toolDispatcher: ToolDispatcher,
@@ -72,6 +77,7 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
+  @ConditionalOnMissingBean
   fun realtimeSidebandService(
     mcpProperties: McpProperties,
     objectMapper: ObjectMapper,
@@ -90,6 +96,7 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
+  @ConditionalOnMissingBean
   fun realtimeSidebandHandler(
     sidebandService: RealtimeSidebandService,
     openAiHttpService: OpenAiHttpService,

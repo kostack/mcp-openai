@@ -109,7 +109,7 @@ class RealtimeEventHandlerTest {
 
       coEvery { toolDispatcher.execute("lookup_account", capture(contextSlot)) } returns toolResult
       every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
-      coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } just Runs
+      coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } returns true
 
       handler().handle(event = event, request = request)
 
@@ -163,11 +163,40 @@ class RealtimeEventHandlerTest {
       request.audioEnabled = false
       coEvery { toolDispatcher.execute("lookup_account", any()) } returns toolResult
       every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
-      coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } just Runs
+      coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } returns true
 
       handler().handle(event = event, request = request)
 
       assertEquals(RealtimeUtils.createResponse("text"), sentMessages[1])
+    }
+
+  @Test
+  fun `handle skips response create when function output cannot be sent`() =
+    runTest {
+      val arguments = """{"accountId":"acct-1"}"""
+      val event =
+        RealtimeEvent(
+          type = "response.function_call_arguments.done",
+          name = "lookup_account",
+          callId = "tool-call-1",
+          arguments = arguments
+        )
+      val request = request()
+      val toolResult = ToolResult(success = true, result = mapOf("status" to "found"))
+      val serializedToolResult = """{"success":true,"result":{"status":"found"}}"""
+      val expectedOutput =
+        RealtimeUtils.conversationFunctionOutput("tool-call-1", serializedToolResult)
+
+      coEvery { toolDispatcher.execute("lookup_account", any()) } returns toolResult
+      every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
+      coEvery { websocketSessionRegistry.sendJson(request.callId, expectedOutput) } returns false
+
+      handler().handle(event = event, request = request)
+
+      coVerify(exactly = 1) { websocketSessionRegistry.sendJson(request.callId, expectedOutput) }
+      coVerify(exactly = 0) {
+        websocketSessionRegistry.sendJson(request.callId, RealtimeUtils.createResponse("text"))
+      }
     }
 
   @Test
