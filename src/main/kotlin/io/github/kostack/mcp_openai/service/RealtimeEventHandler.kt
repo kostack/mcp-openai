@@ -100,22 +100,24 @@ class RealtimeEventHandler(
     val rawArguments = arguments ?: "{}"
 
     log.info(
-      "Handling function call: name={}, callId={}, namespace={}, channel={}, args={}",
+      "Handling function call: name={}, callId={}, namespace={}, channel={}, sessionCallId={} args={}",
       toolName,
       toolCallId,
       request.namespace,
       request.channel,
+      request.callId,
       rawArguments
     )
 
-    val context = ToolContext(request.namespace, request.channel, rawArguments)
+    val context = ToolContext(request.namespace, request.channel, request.callId, rawArguments)
     val toolResult = toolDispatcher.execute(toolName, context)
 
     log.info(
-      "Tool call result: name={}, callId={}, channel={}, success={}",
+      "Tool call result: name={}, callId={}, channel={}, sessionCallId={}, success={}",
       toolName,
       toolCallId,
       request.channel,
+      request.callId,
       toolResult.success
     )
 

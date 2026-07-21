@@ -20,7 +20,13 @@ class ToolDispatcherTest {
   @Test
   fun `execute runs matching tool by name and namespace`() =
     runTest {
-      val context = ToolContext(namespace = "crm", channel = "sideband", rawRequest = """{"id":1}""")
+      val context =
+        ToolContext(
+          namespace = "crm",
+          channel = "sideband",
+          sessionId = "session-1",
+          rawRequest = """{"id":1}"""
+        )
       val expectedResult = ToolResult(success = true, result = "created")
       val matchingTool = tool("crm", "create_contact")
       val otherNamespaceTool = tool("support", "create_contact")
@@ -40,7 +46,13 @@ class ToolDispatcherTest {
   @Test
   fun `execute returns failed result when tool is unknown`() =
     runTest {
-      val context = ToolContext(namespace = "crm", channel = "sideband", rawRequest = """{"id":1}""")
+      val context =
+        ToolContext(
+          namespace = "crm",
+          channel = "sideband",
+          sessionId = "session-1",
+          rawRequest = """{"id":1}"""
+        )
       val dispatcher = ToolDispatcher(listOf(tool("support", "create_contact")))
 
       val result = dispatcher.execute("create_contact", context)
@@ -52,7 +64,13 @@ class ToolDispatcherTest {
   @Test
   fun `execute returns failed result when tool throws exception`() =
     runTest {
-      val context = ToolContext(namespace = "crm", channel = "sideband", rawRequest = """{"id":1}""")
+      val context =
+        ToolContext(
+          namespace = "crm",
+          channel = "sideband",
+          sessionId = "session-1",
+          rawRequest = """{"id":1}"""
+        )
       val matchingTool = tool("crm", "create_contact")
       val dispatcher = ToolDispatcher(listOf(matchingTool))
 
@@ -70,7 +88,7 @@ class ToolDispatcherTest {
   @Test
   fun `execute rethrows cancellation exception`() =
     runTest {
-      val context = ToolContext(namespace = "crm", channel = "sideband")
+      val context = ToolContext(namespace = "crm", channel = "sideband", sessionId = "session-1")
       val matchingTool = tool("crm", "create_contact")
       val dispatcher = ToolDispatcher(listOf(matchingTool))
       val cancellation = CancellationException("client disconnected")

@@ -113,7 +113,15 @@ class RealtimeEventHandlerTest {
 
       handler().handle(event = event, request = request)
 
-      assertEquals(ToolContext(namespace = "crm", channel = "web", rawRequest = arguments), contextSlot.captured)
+      assertEquals(
+        ToolContext(
+          namespace = "crm",
+          channel = "web",
+          sessionId = "call-123",
+          rawRequest = arguments
+        ),
+        contextSlot.captured
+      )
       assertEquals(expectedMessages, sentMessages)
       coVerifyOrder {
         toolDispatcher.execute("lookup_account", any())

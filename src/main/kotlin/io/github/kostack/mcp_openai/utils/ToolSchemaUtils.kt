@@ -16,4 +16,12 @@ object ToolSchemaUtils {
         object : TypeReference<MutableMap<String, Any>>() {}
       ).also { it.remove("\$schema") }
   }
+
+  fun emptyParameters(): Map<String, Any> =
+    mapOf(
+      "type" to "object",
+      "properties" to emptyMap<String, Any>(),
+      "required" to emptyList<String>(),
+      "additionalProperties" to false
+    )
 }
