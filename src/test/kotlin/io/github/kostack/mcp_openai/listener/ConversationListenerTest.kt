@@ -169,6 +169,35 @@ class ConversationListenerTest {
       )
     }
 
+  @Test
+  fun `response output item done saves assistant message before response completes`() =
+    runTest {
+      val item =
+        RealtimeItem(
+          id = "assistant-item-1",
+          type = "message",
+          role = "assistant",
+          content = listOf(RealtimeContent(type = "output_text", text = "Answer"))
+        )
+
+      listener.onResponseOutputItemDone(
+        event(RealtimeEvent(type = "response.output_item.done", item = item))
+      )
+      listener.onResponseDone(
+        event(
+          RealtimeEvent(
+            type = "response.done",
+            response = RealtimeResponse(output = listOf(item))
+          )
+        )
+      )
+
+      assertEquals(
+        listOf(mapOf("role" to "assistant", "content" to "Answer")),
+        conversationStore.history("web")
+      )
+    }
+
   private fun event(realtimeEvent: RealtimeEvent): RealtimeHandlerEvent =
     RealtimeHandlerEvent(
       realtimeEvent = realtimeEvent,

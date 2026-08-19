@@ -54,13 +54,28 @@ class ConversationListener(
 
     output
       .filter { it.type == "message" && it.role == "assistant" }
-      .mapNotNull { extractTextFromItem(it, input = false) }
-      .forEach { text ->
-        conversationStore.append(
-          event.request.channel,
-          mapOf("role" to "assistant", "content" to text)
-        )
-      }
+      .forEach { appendAssistantItem(event, it) }
+  }
+
+  @SuspendListener(RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE)
+  suspend fun onResponseOutputItemDone(event: RealtimeHandlerEvent) {
+    val item = event.realtimeEvent.item ?: return
+    if (item.type != "message" || item.role != "assistant") return
+
+    appendAssistantItem(event, item)
+  }
+
+  private fun appendAssistantItem(
+    event: RealtimeHandlerEvent,
+    item: RealtimeItem
+  ) {
+    val text = extractTextFromItem(item, input = false) ?: return
+
+    conversationStore.appendOnce(
+      sessionId = event.request.channel,
+      itemId = item.id,
+      item = mapOf("role" to "assistant", "content" to text)
+    )
   }
 
   private fun extractTextFromItem(
