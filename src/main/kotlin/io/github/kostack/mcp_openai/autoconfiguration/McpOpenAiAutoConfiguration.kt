@@ -9,6 +9,7 @@ import io.github.kostack.mcp_openai.listener.ConversationListener
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.service.ConversationStore
+import io.github.kostack.mcp_openai.service.ConversationStoreImpl
 import io.github.kostack.mcp_openai.service.OpenAiHttpService
 import io.github.kostack.mcp_openai.service.RealtimeEventHandler
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
@@ -63,8 +64,8 @@ class McpOpenAiAutoConfiguration {
     WebSocketSessionRegistry(objectMapper)
 
   @Bean
-  @ConditionalOnMissingBean(name = ["conversationStore"])
-  fun conversationStore(): ConversationStore = ConversationStore()
+  @ConditionalOnMissingBean(ConversationStore::class)
+  fun conversationStore(): ConversationStore = ConversationStoreImpl()
 
   @Bean
   @ConditionalOnMissingBean(name = ["toolDispatcher"])

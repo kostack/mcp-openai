@@ -7,12 +7,13 @@ import io.github.kostack.mcp_openai.dto.RealtimeResponse
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.service.ConversationStore
+import io.github.kostack.mcp_openai.service.ConversationStoreImpl
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ConversationListenerTest {
-  private val conversationStore = ConversationStore()
+  private val conversationStore: ConversationStore = ConversationStoreImpl()
   private val listener = ConversationListener(conversationStore)
 
   @Test

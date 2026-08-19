@@ -65,7 +65,7 @@ class ConversationListener(
     appendAssistantItem(event, item)
   }
 
-  private fun appendAssistantItem(
+  private suspend fun appendAssistantItem(
     event: RealtimeHandlerEvent,
     item: RealtimeItem
   ) {
