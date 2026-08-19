@@ -6,6 +6,7 @@ data class ToolContext(
   val namespace: String,
   val channel: String,
   val sessionId: String,
+  val toolCallId: String,
   var rawRequest: String? = null,
   val metadata: MutableMap<String, Any> = mutableMapOf()
 ) {

@@ -118,6 +118,7 @@ class RealtimeEventHandlerTest {
           namespace = "crm",
           channel = "web",
           sessionId = "call-123",
+          toolCallId = "tool-call-1",
           rawRequest = arguments
         ),
         contextSlot.captured

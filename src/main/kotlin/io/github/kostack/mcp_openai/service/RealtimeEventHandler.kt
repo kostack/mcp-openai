@@ -109,7 +109,14 @@ class RealtimeEventHandler(
       rawArguments
     )
 
-    val context = ToolContext(request.namespace, request.channel, request.callId, rawArguments)
+    val context =
+      ToolContext(
+        request.namespace,
+        request.channel,
+        request.callId,
+        toolCallId,
+        rawArguments
+      )
     val toolResult = toolDispatcher.execute(toolName, context)
 
     log.info(

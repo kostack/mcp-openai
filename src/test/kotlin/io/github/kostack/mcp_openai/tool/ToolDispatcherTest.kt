@@ -25,6 +25,7 @@ class ToolDispatcherTest {
           namespace = "crm",
           channel = "sideband",
           sessionId = "session-1",
+          toolCallId = "tool-call-1",
           rawRequest = """{"id":1}"""
         )
       val expectedResult = ToolResult(success = true, result = "created")
@@ -51,6 +52,7 @@ class ToolDispatcherTest {
           namespace = "crm",
           channel = "sideband",
           sessionId = "session-1",
+          toolCallId = "tool-call-1",
           rawRequest = """{"id":1}"""
         )
       val dispatcher = ToolDispatcher(listOf(tool("support", "create_contact")))
@@ -69,6 +71,7 @@ class ToolDispatcherTest {
           namespace = "crm",
           channel = "sideband",
           sessionId = "session-1",
+          toolCallId = "tool-call-1",
           rawRequest = """{"id":1}"""
         )
       val matchingTool = tool("crm", "create_contact")
@@ -88,7 +91,7 @@ class ToolDispatcherTest {
   @Test
   fun `execute rethrows cancellation exception`() =
     runTest {
-      val context = ToolContext(namespace = "crm", channel = "sideband", sessionId = "session-1")
+      val context = ToolContext(namespace = "crm", channel = "sideband", sessionId = "session-1", "tool-call-1")
       val matchingTool = tool("crm", "create_contact")
       val dispatcher = ToolDispatcher(listOf(matchingTool))
       val cancellation = CancellationException("client disconnected")
