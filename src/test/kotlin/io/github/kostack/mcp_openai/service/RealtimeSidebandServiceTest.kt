@@ -4,6 +4,7 @@ import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
+import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.mockk.coVerify
@@ -32,6 +33,7 @@ import kotlin.test.assertTrue
 @ExtendWith(OutputCaptureExtension::class)
 class RealtimeSidebandServiceTest {
   private val sidebandRegistry = mockk<SidebandSessionRegistry>(relaxed = true)
+  private val heartbeatRegistry = mockk<SidebandHeartbeatRegistry>(relaxed = true)
   private val sessionRegistry = mockk<WebSocketSessionRegistry>(relaxed = true)
   private val realtimeEventHandler = mockk<RealtimeEventHandler>(relaxed = true)
   private val suspendDispatcher = mockk<SuspendDispatcher>(relaxed = true)
@@ -221,6 +223,7 @@ class RealtimeSidebandServiceTest {
       sessionRegistry = sessionRegistry,
       realtimeEventHandler = realtimeEventHandler,
       suspendDispatcher = suspendDispatcher,
-      client = sidebandWebSocketClient
+      client = sidebandWebSocketClient,
+      heartbeatRegistry = heartbeatRegistry
     )
 }

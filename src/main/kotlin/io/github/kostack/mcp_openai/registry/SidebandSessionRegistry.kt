@@ -23,4 +23,17 @@ class SidebandSessionRegistry {
   }
 
   fun contains(callId: String): Boolean = sessions.containsKey(callId)
+
+  fun get(callId: String): Job? = sessions[callId]
+
+  fun isActive(callId: String): Boolean {
+    val job = get(callId) ?: return false
+
+    return if (job.isActive) {
+      true
+    } else {
+      sessions.remove(callId, job)
+      false
+    }
+  }
 }

@@ -2,7 +2,11 @@ package io.github.kostack.mcp_openai.autoconfiguration
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeSidebandHandler
+import io.github.kostack.mcp_openai.health.SidebandLivenessService
+import io.github.kostack.mcp_openai.health.SidebandStatusPublisherImpl
 import io.github.kostack.mcp_openai.listener.ConversationListener
+import io.github.kostack.mcp_openai.listener.HeartbeatListener
+import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.service.ConversationStore
@@ -37,6 +41,10 @@ class McpOpenAiAutoConfigurationTest {
       assertThat(context).hasSingleBean(WebSocketClient::class.java)
       assertThat(context).hasSingleBean(SidebandSessionRegistry::class.java)
       assertThat(context).hasSingleBean(WebSocketSessionRegistry::class.java)
+      assertThat(context).hasSingleBean(SidebandHeartbeatRegistry::class.java)
+      assertThat(context).hasSingleBean(SidebandStatusPublisherImpl::class.java)
+      assertThat(context).hasSingleBean(SidebandLivenessService::class.java)
+      assertThat(context).hasSingleBean(HeartbeatListener::class.java)
       assertThat(context).hasSingleBean(ConversationStore::class.java)
       assertThat(context).hasSingleBean(ToolDispatcher::class.java)
       assertThat(context).hasSingleBean(OpenAiHttpService::class.java)

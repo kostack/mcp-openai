@@ -20,8 +20,17 @@ class WebSocketSessionRegistry(
     sessions[callId] = session
   }
 
-  fun remove(callId: String) {
-    sessions.remove(callId)
+  fun get(callId: String): WebSocketSession? = sessions[callId]
+
+  fun isOpen(callId: String): Boolean {
+    val session = get(callId) ?: return false
+
+    if (!session.isOpen) {
+      remove(callId, session)
+      return false
+    }
+
+    return true
   }
 
   fun remove(
@@ -35,23 +44,58 @@ class WebSocketSessionRegistry(
     callId: String,
     json: Any
   ): Boolean {
-    val session = sessions[callId] ?: return false
-    if (!session.isOpen) {
-      sessions.remove(callId, session)
+    val session = get(callId) ?: return false
+    if (!isOpen(callId)) {
       log.debug("Skipped websocket send because session is closed callId={}", callId)
       return false
     }
 
     val message = objectMapper.writeValueAsString(json)
-    try {
+    return try {
       session.send(Mono.just(session.textMessage(message))).awaitFirstOrNull()
-      return true
+      true
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      sessions.remove(callId, session)
+      remove(callId, session)
       log.debug("Skipped websocket send after session closed callId={}, error={}", callId, e.message)
+      false
+    }
+  }
+
+  suspend fun sendPing(callId: String): Boolean {
+    val session =
+      get(callId) ?: return false
+
+    if (!isOpen(callId)) {
       return false
+    }
+
+    return try {
+      val ping =
+        session.pingMessage { bufferFactory ->
+          bufferFactory.wrap(
+            callId.toByteArray()
+          )
+        }
+
+      session
+        .send(Mono.just(ping))
+        .awaitFirstOrNull()
+
+      true
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      remove(callId, session)
+
+      log.debug(
+        "Websocket ping failed callId={}, error={}",
+        callId,
+        e.message
+      )
+
+      false
     }
   }
 

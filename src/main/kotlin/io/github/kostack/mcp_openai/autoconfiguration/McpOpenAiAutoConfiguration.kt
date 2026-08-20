@@ -5,7 +5,12 @@ import io.github.kostack.mcp_openai.RealtimeSidebandHandler
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.dto.TokenRequest
+import io.github.kostack.mcp_openai.health.SidebandLivenessService
+import io.github.kostack.mcp_openai.health.SidebandStatusPublisher
+import io.github.kostack.mcp_openai.health.SidebandStatusPublisherImpl
 import io.github.kostack.mcp_openai.listener.ConversationListener
+import io.github.kostack.mcp_openai.listener.HeartbeatListener
+import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.service.ConversationStore
@@ -64,6 +69,34 @@ class McpOpenAiAutoConfiguration {
     WebSocketSessionRegistry(objectMapper)
 
   @Bean
+  @ConditionalOnMissingBean(SidebandHeartbeatRegistry::class)
+  fun sidebandHeartbeatRegistry(): SidebandHeartbeatRegistry = SidebandHeartbeatRegistry()
+
+  @Bean
+  @ConditionalOnMissingBean(SidebandStatusPublisher::class)
+  fun sidebandStatusPublisher(): SidebandStatusPublisherImpl = SidebandStatusPublisherImpl()
+
+  @Bean
+  @ConditionalOnMissingBean(SidebandLivenessService::class)
+  fun sidebandLivenessService(
+    sidebandSessionRegistry: SidebandSessionRegistry,
+    webSocketSessionRegistry: WebSocketSessionRegistry,
+    sidebandHeartbeatRegistry: SidebandHeartbeatRegistry,
+    sidebandStatusPublisher: SidebandStatusPublisher
+  ): SidebandLivenessService =
+    SidebandLivenessService(
+      sidebandSessionRegistry,
+      webSocketSessionRegistry,
+      sidebandHeartbeatRegistry,
+      sidebandStatusPublisher
+    )
+
+  @Bean
+  @ConditionalOnMissingBean(HeartbeatListener::class)
+  fun heartbeatListener(sidebandLivenessService: SidebandLivenessService): HeartbeatListener =
+    HeartbeatListener(sidebandLivenessService)
+
+  @Bean
   @ConditionalOnMissingBean(ConversationStore::class)
   fun conversationStore(): ConversationStore = ConversationStoreImpl()
 
@@ -102,6 +135,7 @@ class McpOpenAiAutoConfiguration {
     sessionRegistry: WebSocketSessionRegistry,
     realtimeEventHandler: RealtimeEventHandler,
     suspendDispatcher: SuspendDispatcher,
+    sidebandHeartbeatRegistry: SidebandHeartbeatRegistry,
     @Qualifier("realtimeSidebandWebSocketClient") sidebandWebSocketClient: WebSocketClient
   ): RealtimeSidebandService =
     RealtimeSidebandService(
@@ -111,7 +145,8 @@ class McpOpenAiAutoConfiguration {
       sessionRegistry,
       realtimeEventHandler,
       suspendDispatcher,
-      sidebandWebSocketClient
+      sidebandWebSocketClient,
+      sidebandHeartbeatRegistry
     )
 
   @Bean

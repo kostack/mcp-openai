@@ -7,6 +7,7 @@ import io.github.kostack.mcp_openai.dto.RealtimeEvent
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.event.RealtimeConnectEvent
+import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import jakarta.annotation.PreDestroy
@@ -22,9 +23,11 @@ import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.reactor.mono
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
+import org.springframework.web.reactive.socket.WebSocketMessage
 import org.springframework.web.reactive.socket.WebSocketSession
 import org.springframework.web.reactive.socket.client.WebSocketClient
 import org.springframework.web.util.UriComponentsBuilder
+import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
 
@@ -35,7 +38,8 @@ class RealtimeSidebandService(
   private val sessionRegistry: WebSocketSessionRegistry,
   private val realtimeEventHandler: RealtimeEventHandler,
   private val suspendDispatcher: SuspendDispatcher,
-  private val client: WebSocketClient
+  private val client: WebSocketClient,
+  private val heartbeatRegistry: SidebandHeartbeatRegistry
 ) {
   private val supervisorJob = SupervisorJob()
   private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
@@ -88,14 +92,27 @@ class RealtimeSidebandService(
             session
               .receive()
               .concatMap { msg ->
-                val event =
-                  objectMapper.readValue(
-                    msg.payloadAsText,
-                    RealtimeEvent::class.java
-                  )
-                mono {
-                  realtimeEventHandler.handle(event, request)
-                }.then()
+                when (msg.type) {
+                  WebSocketMessage.Type.TEXT -> {
+                    val event =
+                      objectMapper.readValue(
+                        msg.payloadAsText,
+                        RealtimeEvent::class.java
+                      )
+                    mono {
+                      realtimeEventHandler.handle(event, request)
+                    }.then()
+                  }
+
+                  WebSocketMessage.Type.PONG -> {
+                    heartbeatRegistry.pong(callId)
+                    Mono.empty()
+                  }
+
+                  else -> {
+                    Mono.empty()
+                  }
+                }
               }.doOnError { e ->
                 if (e is CancellationException) {
                   log.info("Sideband receive cancelled callId={}", callId)
@@ -122,7 +139,7 @@ class RealtimeSidebandService(
     }
   }
 
-  suspend fun disconnect(request: SidebandDisconnectRequest) {
+  fun disconnect(request: SidebandDisconnectRequest) {
     sidebandRegistry.cancel(request.callId)
   }
 

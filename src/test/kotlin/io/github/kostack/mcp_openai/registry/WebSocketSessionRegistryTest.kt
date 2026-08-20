@@ -10,6 +10,7 @@ import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class WebSocketSessionRegistryTest {
   private val objectMapper = mockk<ObjectMapper>()
@@ -50,6 +51,23 @@ class WebSocketSessionRegistryTest {
       assertFalse(registry.sendJson("call-123", payload))
 
       verify(exactly = 1) { objectMapper.writeValueAsString(payload) }
+      verify(exactly = 1) { session.send(any()) }
+    }
+
+  @Test
+  fun `sendPing sends ping directly through websocket session`() =
+    runTest {
+      val registry = WebSocketSessionRegistry(objectMapper)
+      val session = mockk<WebSocketSession>()
+      val ping = mockk<WebSocketMessage>()
+
+      every { session.isOpen } returns true
+      every { session.pingMessage(any()) } returns ping
+      every { session.send(any()) } returns Mono.empty()
+
+      registry.put("call-123", session)
+      assertTrue(registry.sendPing("call-123"))
+
       verify(exactly = 1) { session.send(any()) }
     }
 }
