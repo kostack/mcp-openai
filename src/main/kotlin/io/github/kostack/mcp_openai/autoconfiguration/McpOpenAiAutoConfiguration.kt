@@ -74,7 +74,7 @@ class McpOpenAiAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean(SidebandStatusPublisher::class)
-  fun sidebandStatusPublisher(): SidebandStatusPublisherImpl = SidebandStatusPublisherImpl()
+  fun sidebandStatusPublisher(): SidebandStatusPublisher = SidebandStatusPublisherImpl()
 
   @Bean
   @ConditionalOnMissingBean(SidebandLivenessService::class)
