@@ -2,11 +2,13 @@ package io.github.kostack.mcp_openai.service
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
+import io.github.kostack.mcp_openai.dto.RealtimeEvent
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -21,8 +23,12 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketHandler
+import org.springframework.web.reactive.socket.WebSocketMessage
+import org.springframework.web.reactive.socket.WebSocketSession
 import org.springframework.web.reactive.socket.client.WebSocketClient
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.core.publisher.Sinks
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
 import kotlin.test.Test
@@ -166,6 +172,61 @@ class RealtimeSidebandServiceTest {
 
       coVerify(exactly = 0) { suspendDispatcher.publishSequential(any(), any()) }
       verify(exactly = 1) { sidebandRegistry.cancel(request.callId) }
+    }
+
+  @Test
+  fun `pong is processed after tool call is dispatched`() =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      val session = mockk<WebSocketSession>()
+      val functionCallMessage = mockk<WebSocketMessage>()
+      val pongMessage = mockk<WebSocketMessage>()
+      val toolStarted = Sinks.one<Unit>()
+      val request =
+        SidebandConnectRequest(
+          callId = "call-123",
+          clientSecret = "client-secret",
+          namespace = "crm",
+          channel = "web",
+          language = "en"
+        )
+      val event =
+        RealtimeEvent(
+          type = "response.function_call_arguments.done",
+          callId = "tool-call-1"
+        )
+
+      every { sidebandRegistry.putIfAbsent(request.callId, capture(jobSlot)) } returns null
+      every { functionCallMessage.type } returns WebSocketMessage.Type.TEXT
+      every { functionCallMessage.payloadAsText } returns "tool-call-event"
+      every { pongMessage.type } returns WebSocketMessage.Type.PONG
+      every { objectMapper.readValue("tool-call-event", RealtimeEvent::class.java) } returns event
+      every { session.receive() } returns
+        Flux.concat(
+          Mono.just(functionCallMessage),
+          toolStarted.asMono().thenReturn(pongMessage),
+          Mono.never()
+        )
+      coEvery { realtimeEventHandler.handleInbound(event, request) } coAnswers {
+        toolStarted.tryEmitValue(Unit)
+      }
+      every {
+        sidebandWebSocketClient.execute(
+          any<URI>(),
+          any<HttpHeaders>(),
+          any<WebSocketHandler>()
+        )
+      } answers {
+        thirdArg<WebSocketHandler>().handle(session)
+      }
+
+      service().connect(request)
+
+      verify(timeout = 1_000, exactly = 1) { heartbeatRegistry.pong(request.callId) }
+      coVerify(exactly = 1) { realtimeEventHandler.handleInbound(event, request) }
+
+      jobSlot.captured.cancelAndJoin()
+      verify(exactly = 1) { realtimeEventHandler.cancel(request.callId) }
     }
 
   @Test

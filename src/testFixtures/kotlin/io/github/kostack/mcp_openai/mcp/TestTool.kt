@@ -5,7 +5,9 @@ import io.github.kostack.mcp_openai.dto.ToolDefinition
 import io.github.kostack.mcp_openai.dto.ToolResult
 import io.github.kostack.mcp_openai.tool.AbstractTool
 import io.github.kostack.mcp_openai.utils.ToolSchemaUtils
+import kotlinx.coroutines.delay
 import org.springframework.stereotype.Component
+import kotlin.time.Duration.Companion.seconds
 
 @Component
 class TestTool : AbstractTool() {
@@ -26,6 +28,8 @@ class TestTool : AbstractTool() {
 
   override suspend fun execute(context: ToolContext): ToolResult {
     val request = context.getRequest<TestRequest>()
+
+    delay(60.seconds)
 
     val place =
       when (request.countryCode) {

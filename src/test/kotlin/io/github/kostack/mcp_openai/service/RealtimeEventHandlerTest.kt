@@ -19,6 +19,8 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
@@ -30,6 +32,39 @@ class RealtimeEventHandlerTest {
   private val toolDispatcher = mockk<ToolDispatcher>()
   private val websocketSessionRegistry = mockk<WebSocketSessionRegistry>()
   private val suspendDispatcher = mockk<SuspendDispatcher>()
+
+  @Test
+  fun `handle inbound returns while function call continues in tool scope`() =
+    runTest {
+      val event =
+        RealtimeEvent(
+          type = "response.function_call_arguments.done",
+          name = "lookup_account",
+          callId = "tool-call-1"
+        )
+      val request = request()
+      val toolStarted = CompletableDeferred<Unit>()
+      val toolCancelled = CompletableDeferred<Unit>()
+
+      coEvery { toolDispatcher.execute("lookup_account", any()) } coAnswers {
+        toolStarted.complete(Unit)
+        try {
+          awaitCancellation()
+        } finally {
+          toolCancelled.complete(Unit)
+        }
+      }
+
+      val handler = handler()
+      handler.handleInbound(event, request)
+
+      toolStarted.await()
+      coVerify(exactly = 1) { toolDispatcher.execute("lookup_account", any()) }
+      coVerify(exactly = 0) { websocketSessionRegistry.sendJson(any(), any()) }
+
+      handler.cancel(request.callId)
+      toolCancelled.await()
+    }
 
   @Test
   fun `handle publishes session updated event with request and namespace`() =

@@ -9,8 +9,16 @@ import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
+import jakarta.annotation.PreDestroy
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import tools.jackson.databind.ObjectMapper
+import java.util.concurrent.ConcurrentHashMap
 
 class RealtimeEventHandler(
   private val objectMapper: ObjectMapper,
@@ -18,6 +26,45 @@ class RealtimeEventHandler(
   private val websocketSessionRegistry: WebSocketSessionRegistry,
   private val suspendDispatcher: SuspendDispatcher
 ) {
+  private val supervisorJob = SupervisorJob()
+  private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
+  private val toolCallScopes = ConcurrentHashMap<String, CoroutineScope>()
+
+  suspend fun handleInbound(
+    event: RealtimeEvent,
+    request: SidebandConnectRequest
+  ) {
+    if (event.type != FUNCTION_CALL_ARGUMENTS_DONE) {
+      handle(event, request)
+      return
+    }
+
+    toolCallScope(request.callId).launch {
+      try {
+        handle(event, request)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        log.error(
+          "Realtime tool call failed callId={}, toolCallId={}",
+          request.callId,
+          event.callId,
+          e
+        )
+      }
+    }
+  }
+
+  fun cancel(callId: String) {
+    toolCallScopes.remove(callId)?.cancel()
+  }
+
+  @PreDestroy
+  fun destroy() {
+    supervisorJob.cancel()
+    toolCallScopes.clear()
+  }
+
   suspend fun handle(
     event: RealtimeEvent,
     request: SidebandConnectRequest
@@ -152,7 +199,13 @@ class RealtimeEventHandler(
     )
   }
 
+  private fun toolCallScope(callId: String): CoroutineScope =
+    toolCallScopes.computeIfAbsent(callId) {
+      CoroutineScope(scope.coroutineContext + SupervisorJob(supervisorJob))
+    }
+
   companion object {
+    private const val FUNCTION_CALL_ARGUMENTS_DONE = "response.function_call_arguments.done"
     private val log = LoggerFactory.getLogger(RealtimeEventHandler::class.java)
   }
 }

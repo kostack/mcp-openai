@@ -91,7 +91,7 @@ class SidebandLivenessService(
 
     val status = determineStatus(callId)
 
-    log.debug("Sent ping status={}", status)
+    log.info("Sent ping status={}", status)
 
     updateStatus(
       callId = callId,

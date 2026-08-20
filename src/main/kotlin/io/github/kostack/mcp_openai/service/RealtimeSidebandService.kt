@@ -100,7 +100,7 @@ class RealtimeSidebandService(
                         RealtimeEvent::class.java
                       )
                     mono {
-                      realtimeEventHandler.handle(event, request)
+                      realtimeEventHandler.handleInbound(event, request)
                     }.then()
                   }
 
@@ -133,6 +133,7 @@ class RealtimeSidebandService(
         log.error("Sideband failed callId={}, error={}", callId, e.message, e)
       }
     } finally {
+      realtimeEventHandler.cancel(callId)
       log.info("Sideband closed callId={}", callId)
       websocketSession?.let { sessionRegistry.remove(callId, it) }
       sidebandRegistry.remove(callId, job)
