@@ -92,8 +92,6 @@ class SidebandLivenessService(
 
     val status = determineStatus(callId)
 
-    log.info("Sent ping status={}", status)
-
     updateStatus(
       callId = callId,
       channel = channel,
@@ -130,11 +128,7 @@ class SidebandLivenessService(
     channel: String,
     status: SidebandStatus
   ) {
-    val previous = statuses.put(callId, status)
-
-    if (previous == status) {
-      return
-    }
+    statuses[callId] = status
 
     statusPublisher.publish(
       callId = callId,
