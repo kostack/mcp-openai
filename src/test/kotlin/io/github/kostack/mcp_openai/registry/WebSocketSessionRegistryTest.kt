@@ -6,7 +6,6 @@ import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.springframework.web.reactive.socket.WebSocketMessage
 import org.springframework.web.reactive.socket.WebSocketSession
-import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -30,44 +29,33 @@ class WebSocketSessionRegistryTest {
 
       verify(exactly = 1) { session.isOpen }
       verify(exactly = 0) { objectMapper.writeValueAsString(any()) }
-      verify(exactly = 0) { session.send(any()) }
     }
 
   @Test
-  fun `sendJson removes session and suppresses websocket send failure`() =
+  fun `json and ping share one ordered outbound stream`() =
     runTest {
       val registry = WebSocketSessionRegistry(objectMapper)
       val session = mockk<WebSocketSession>()
-      val message = mockk<WebSocketMessage>()
+      val jsonMessage = mockk<WebSocketMessage>()
+      val pingMessage = mockk<WebSocketMessage>()
       val payload = mapOf("type" to "response.create")
 
       every { session.isOpen } returns true
       every { objectMapper.writeValueAsString(payload) } returns """{"type":"response.create"}"""
-      every { session.textMessage("""{"type":"response.create"}""") } returns message
-      every { session.send(any()) } returns Mono.error(IllegalStateException("closed before send"))
+      every { session.textMessage("""{"type":"response.create"}""") } returns jsonMessage
+      every { session.pingMessage(any()) } returns pingMessage
 
-      registry.put("call-123", session)
-      assertFalse(registry.sendJson("call-123", payload))
-      assertFalse(registry.sendJson("call-123", payload))
+      val messages =
+        registry
+          .put("call-123", session)
+          .take(2)
+          .collectList()
+          .toFuture()
 
-      verify(exactly = 1) { objectMapper.writeValueAsString(payload) }
-      verify(exactly = 1) { session.send(any()) }
-    }
-
-  @Test
-  fun `sendPing sends ping directly through websocket session`() =
-    runTest {
-      val registry = WebSocketSessionRegistry(objectMapper)
-      val session = mockk<WebSocketSession>()
-      val ping = mockk<WebSocketMessage>()
-
-      every { session.isOpen } returns true
-      every { session.pingMessage(any()) } returns ping
-      every { session.send(any()) } returns Mono.empty()
-
-      registry.put("call-123", session)
+      assertTrue(registry.sendJson("call-123", payload))
       assertTrue(registry.sendPing("call-123"))
 
-      verify(exactly = 1) { session.send(any()) }
+      kotlin.test.assertEquals(listOf(jsonMessage, pingMessage), messages.get())
+      verify(exactly = 0) { session.send(any()) }
     }
 }

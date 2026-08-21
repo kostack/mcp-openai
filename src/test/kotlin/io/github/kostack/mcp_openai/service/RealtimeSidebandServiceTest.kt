@@ -201,6 +201,8 @@ class RealtimeSidebandServiceTest {
       every { functionCallMessage.payloadAsText } returns "tool-call-event"
       every { pongMessage.type } returns WebSocketMessage.Type.PONG
       every { objectMapper.readValue("tool-call-event", RealtimeEvent::class.java) } returns event
+      every { sessionRegistry.put(request.callId, session) } returns Flux.never()
+      every { session.send(any()) } returns Mono.never()
       every { session.receive() } returns
         Flux.concat(
           Mono.just(functionCallMessage),
@@ -223,6 +225,7 @@ class RealtimeSidebandServiceTest {
       service().connect(request)
 
       verify(timeout = 1_000, exactly = 1) { heartbeatRegistry.pong(request.callId) }
+      verify(exactly = 1) { session.send(any()) }
       coVerify(exactly = 1) { realtimeEventHandler.handleInbound(event, request) }
 
       jobSlot.captured.cancelAndJoin()

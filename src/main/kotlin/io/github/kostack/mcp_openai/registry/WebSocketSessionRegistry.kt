@@ -1,26 +1,29 @@
 package io.github.kostack.mcp_openai.registry
 
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.reactive.awaitFirstOrNull
 import org.slf4j.LoggerFactory
+import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.web.reactive.socket.WebSocketMessage
 import org.springframework.web.reactive.socket.WebSocketSession
-import reactor.core.publisher.Mono
+import reactor.core.publisher.Flux
+import reactor.core.publisher.Sinks
 import tools.jackson.databind.ObjectMapper
 import java.util.concurrent.ConcurrentHashMap
 
 class WebSocketSessionRegistry(
   private val objectMapper: ObjectMapper
 ) {
-  private val sessions = ConcurrentHashMap<String, WebSocketSession>()
+  private val sessions = ConcurrentHashMap<String, Connection>()
 
   fun put(
     callId: String,
     session: WebSocketSession
-  ) {
-    sessions[callId] = session
+  ): Flux<WebSocketMessage> {
+    val connection = Connection(session)
+    sessions.put(callId, connection)?.complete()
+    return connection.outbound.asFlux()
   }
 
-  fun get(callId: String): WebSocketSession? = sessions[callId]
+  fun get(callId: String): WebSocketSession? = sessions[callId]?.session
 
   fun isOpen(callId: String): Boolean {
     val session = get(callId) ?: return false
@@ -37,37 +40,47 @@ class WebSocketSessionRegistry(
     callId: String,
     session: WebSocketSession
   ) {
-    sessions.remove(callId, session)
+    val connection = sessions[callId] ?: return
+    if (connection.session !== session) return
+
+    if (sessions.remove(callId, connection)) {
+      connection.complete()
+    }
   }
 
   suspend fun sendJson(
     callId: String,
     json: Any
   ): Boolean {
-    val session = get(callId) ?: return false
-    if (!isOpen(callId)) {
+    val connection = sessions[callId] ?: return false
+    val session = connection.session
+    if (!session.isOpen) {
+      remove(callId, session)
       log.debug("Skipped websocket send because session is closed callId={}", callId)
       return false
     }
 
-    val message = objectMapper.writeValueAsString(json)
     return try {
-      session.send(Mono.just(session.textMessage(message))).awaitFirstOrNull()
-      true
-    } catch (e: CancellationException) {
-      throw e
+      val jsonMessage = objectMapper.writeValueAsString(json)
+      val emitted = connection.emit(session.textMessage(jsonMessage))
+      if (!emitted) {
+        remove(callId, session)
+        log.debug("Websocket JSON enqueue failed callId={}", callId)
+      }
+      emitted
     } catch (e: Exception) {
       remove(callId, session)
-      log.debug("Skipped websocket send after session closed callId={}, error={}", callId, e.message)
+      log.debug("Websocket JSON enqueue failed callId={}, error={}", callId, e.message)
       false
     }
   }
 
   suspend fun sendPing(callId: String): Boolean {
-    val session =
-      get(callId) ?: return false
+    val connection = sessions[callId] ?: return false
+    val session = connection.session
 
-    if (!isOpen(callId)) {
+    if (!session.isOpen) {
+      remove(callId, session)
       return false
     }
 
@@ -79,13 +92,12 @@ class WebSocketSessionRegistry(
           )
         }
 
-      session
-        .send(Mono.just(ping))
-        .awaitFirstOrNull()
-
-      true
-    } catch (e: CancellationException) {
-      throw e
+      val emitted = connection.emit(ping)
+      if (!emitted) {
+        remove(callId, session)
+        log.debug("Websocket ping enqueue failed callId={}", callId)
+      }
+      emitted
     } catch (e: Exception) {
       remove(callId, session)
 
@@ -96,6 +108,27 @@ class WebSocketSessionRegistry(
       )
 
       false
+    }
+  }
+
+  private class Connection(
+    val session: WebSocketSession
+  ) {
+    val outbound: Sinks.Many<WebSocketMessage> =
+      Sinks.many().unicast().onBackpressureBuffer()
+
+    @Synchronized
+    fun emit(message: WebSocketMessage): Boolean {
+      val emitted = outbound.tryEmitNext(message) == Sinks.EmitResult.OK
+      if (!emitted) {
+        DataBufferUtils.release(message.payload)
+      }
+      return emitted
+    }
+
+    @Synchronized
+    fun complete() {
+      outbound.tryEmitComplete()
     }
   }
 

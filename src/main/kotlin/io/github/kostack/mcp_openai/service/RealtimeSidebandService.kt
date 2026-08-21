@@ -77,7 +77,7 @@ class RealtimeSidebandService(
       client
         .execute(uri, headers) { session ->
           websocketSession = session
-          sessionRegistry.put(callId, session)
+          val outbound = sessionRegistry.put(callId, session)
           log.info("Sideband connected callId={}", callId)
 
           val startSession =
@@ -119,9 +119,11 @@ class RealtimeSidebandService(
                 } else {
                   log.error("Sideband error callId={}", callId, e)
                 }
+              }.doFinally {
+                sessionRegistry.remove(callId, session)
               }.then()
 
-          startSession.then(inbound)
+          startSession.then(Mono.`when`(inbound, session.send(outbound)))
         }.awaitSingleOrNull()
     } catch (e: CancellationException) {
       log.info("Sideband cancelled callId={}", callId)
