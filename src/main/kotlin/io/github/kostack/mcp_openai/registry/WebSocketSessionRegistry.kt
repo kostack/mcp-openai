@@ -48,7 +48,7 @@ class WebSocketSessionRegistry(
     }
   }
 
-  suspend fun sendJson(
+  fun sendJson(
     callId: String,
     json: Any
   ): Boolean {
@@ -75,7 +75,7 @@ class WebSocketSessionRegistry(
     }
   }
 
-  suspend fun sendPing(callId: String): Boolean {
+  fun sendPing(callId: String): Boolean {
     val connection = sessions[callId] ?: return false
     val session = connection.session
 

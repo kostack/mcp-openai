@@ -22,7 +22,8 @@ class SidebandLivenessService(
   private val webSocketSessionRegistry: WebSocketSessionRegistry,
   private val heartbeatRegistry: SidebandHeartbeatRegistry,
   private val statusPublisher: SidebandStatusPublisher,
-  private val pingInterval: Duration = PING_INTERVAL
+  private val pingInterval: Duration = PING_INTERVAL,
+  private val pongTimeout: Duration = PONG_TIMEOUT
 ) {
   private val scope =
     CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -76,16 +77,16 @@ class SidebandLivenessService(
     callId: String,
     channel: String
   ) {
+    if (!sidebandSessionRegistry.isActive(callId) || !webSocketSessionRegistry.isOpen(callId)) {
+      disconnect(callId, channel)
+      return
+    }
+
+    heartbeatRegistry.ping(callId)
     val pingSent = webSocketSessionRegistry.sendPing(callId)
 
     if (!pingSent) {
-      updateStatus(
-        callId = callId,
-        channel = channel,
-        status = SidebandStatus.DISCONNECTED
-      )
-
-      stop(callId)
+      disconnect(callId, channel)
       return
     }
 
@@ -101,29 +102,27 @@ class SidebandLivenessService(
   }
 
   private fun determineStatus(callId: String): SidebandStatus {
-    if (!sidebandSessionRegistry.isActive(callId)) {
-      return SidebandStatus.DISCONNECTED
+    val outstandingPingAge =
+      heartbeatRegistry.outstandingPingAge(callId)
+        ?: return SidebandStatus.CONNECTED
+
+    return if (outstandingPingAge >= pongTimeout) {
+      SidebandStatus.DEGRADED
+    } else {
+      SidebandStatus.CONNECTED
     }
+  }
 
-    if (!webSocketSessionRegistry.isOpen(callId)) {
-      return SidebandStatus.DISCONNECTED
-    }
-
-    val pongAge = heartbeatRegistry.age(callId) ?: return SidebandStatus.DEGRADED
-
-    return when {
-      pongAge >= DISCONNECTED_TIMEOUT -> {
-        SidebandStatus.DISCONNECTED
-      }
-
-      pongAge >= DEGRADED_TIMEOUT -> {
-        SidebandStatus.DEGRADED
-      }
-
-      else -> {
-        SidebandStatus.CONNECTED
-      }
-    }
+  private suspend fun disconnect(
+    callId: String,
+    channel: String
+  ) {
+    updateStatus(
+      callId = callId,
+      channel = channel,
+      status = SidebandStatus.DISCONNECTED
+    )
+    stop(callId)
   }
 
   private suspend fun updateStatus(
@@ -148,11 +147,8 @@ class SidebandLivenessService(
     private val PING_INTERVAL =
       Duration.ofSeconds(10)
 
-    private val DEGRADED_TIMEOUT =
+    private val PONG_TIMEOUT =
       Duration.ofSeconds(25)
-
-    private val DISCONNECTED_TIMEOUT =
-      Duration.ofSeconds(45)
 
     private val log = LoggerFactory.getLogger(SidebandLivenessService::class.java)
   }

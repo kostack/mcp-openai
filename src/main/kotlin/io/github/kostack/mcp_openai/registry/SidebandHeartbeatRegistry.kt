@@ -5,26 +5,30 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 class SidebandHeartbeatRegistry {
-  private val lastPongAt = ConcurrentHashMap<String, Instant>()
+  private val outstandingPingAt = ConcurrentHashMap<String, Instant>()
 
   fun initialize(callId: String) {
-    lastPongAt[callId] = Instant.now()
+    outstandingPingAt.remove(callId)
+  }
+
+  fun ping(callId: String) {
+    outstandingPingAt.putIfAbsent(callId, Instant.now())
   }
 
   fun pong(callId: String) {
-    lastPongAt[callId] = Instant.now()
+    outstandingPingAt.remove(callId)
   }
 
-  fun age(callId: String): Duration? {
-    val lastPong = lastPongAt[callId] ?: return null
+  fun outstandingPingAge(callId: String): Duration? {
+    val pingAt = outstandingPingAt[callId] ?: return null
 
     return Duration.between(
-      lastPong,
+      pingAt,
       Instant.now()
     )
   }
 
   fun remove(callId: String) {
-    lastPongAt.remove(callId)
+    outstandingPingAt.remove(callId)
   }
 }
