@@ -2,6 +2,7 @@ package io.github.kostack.mcp_openai.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import tools.jackson.databind.JsonNode
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class RealtimeEvent(
@@ -39,6 +40,11 @@ data class RealtimeContent(
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class RealtimeResponse(
+  val id: String,
+  val status: String,
+  @JsonProperty("status_details")
+  val statusDetails: JsonNode? = null,
+  val metadata: Map<String, Any?>? = null,
   val output: List<RealtimeItem> = emptyList(),
   val usage: RealtimeUsage? = null
 )

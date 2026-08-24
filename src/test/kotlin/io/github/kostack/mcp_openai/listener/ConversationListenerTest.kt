@@ -109,6 +109,8 @@ class ConversationListenerTest {
             type = "response.done",
             response =
               RealtimeResponse(
+                id = "response-1",
+                status = "completed",
                 output =
                   listOf(
                     RealtimeItem(
@@ -144,6 +146,8 @@ class ConversationListenerTest {
             type = "response.done",
             response =
               RealtimeResponse(
+                id = "response-1",
+                status = "completed",
                 output =
                   listOf(
                     RealtimeItem(
@@ -188,7 +192,12 @@ class ConversationListenerTest {
         event(
           RealtimeEvent(
             type = "response.done",
-            response = RealtimeResponse(output = listOf(item))
+            response =
+              RealtimeResponse(
+                id = "response-1",
+                status = "completed",
+                output = listOf(item)
+              )
           )
         )
       )
