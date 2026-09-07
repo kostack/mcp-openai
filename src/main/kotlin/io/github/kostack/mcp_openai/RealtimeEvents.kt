@@ -11,6 +11,7 @@ object RealtimeEvents {
     "kostack_mcp.conversation.item.input_audio_transcription.completed"
 
   const val RESPONSE_OUTPUT_ITEM_DONE = "kostack_mcp.response.output.item.done"
+  const val RESPONSE_CREATED = "kostack_mcp.response.created"
   const val RESPONSE_DONE = "kostack_mcp.response.done"
   const val RESPONSE_ERROR = "kostack_mcp.response.error"
 

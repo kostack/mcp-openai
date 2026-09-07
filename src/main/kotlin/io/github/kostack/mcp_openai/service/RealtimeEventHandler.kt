@@ -71,14 +71,20 @@ class RealtimeEventHandler(
   ) {
     when (event.type) {
       "session.created",
-      "response.created",
       "rate_limits.updated" -> {
-        log.debug("Realtime event: {}", event.type)
+        log.debug("Realtime event: {}", event)
       }
 
       "session.updated" -> {
         suspendDispatcher.publishSequential(
           RealtimeEvents.SESSION_UPDATED,
+          RealtimeHandlerEvent(event, request)
+        )
+      }
+
+      "response.created" -> {
+        suspendDispatcher.publishSequential(
+          RealtimeEvents.RESPONSE_CREATED,
           RealtimeHandlerEvent(event, request)
         )
       }
