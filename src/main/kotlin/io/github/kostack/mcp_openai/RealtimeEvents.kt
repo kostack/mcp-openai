@@ -14,6 +14,7 @@ object RealtimeEvents {
   const val RESPONSE_CREATED = "kostack_mcp.response.created"
   const val RESPONSE_DONE = "kostack_mcp.response.done"
   const val RESPONSE_ERROR = "kostack_mcp.response.error"
+  const val REALTIME_EVENT = "kostack_mcp.realtime_event"
 
   const val SESSION_UPDATED = "kostack_mcp.session.updated"
 }

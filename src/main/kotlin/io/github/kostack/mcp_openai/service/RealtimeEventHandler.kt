@@ -70,11 +70,6 @@ class RealtimeEventHandler(
     request: SidebandConnectRequest
   ) {
     when (event.type) {
-      "session.created",
-      "rate_limits.updated" -> {
-        log.debug("Realtime event: {}", event)
-      }
-
       "session.updated" -> {
         suspendDispatcher.publishSequential(
           RealtimeEvents.SESSION_UPDATED,
@@ -130,7 +125,10 @@ class RealtimeEventHandler(
       }
 
       else -> {
-        log.debug("Realtime event ignored: {}", event.type)
+        suspendDispatcher.publishSequential(
+          RealtimeEvents.REALTIME_EVENT,
+          RealtimeHandlerEvent(event, request)
+        )
       }
     }
   }
