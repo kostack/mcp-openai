@@ -38,6 +38,7 @@ import tools.jackson.databind.ObjectMapper
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 class RealtimeSidebandService(
   private val mcpProperties: McpProperties,
@@ -151,7 +152,7 @@ class RealtimeSidebandService(
       try {
         if (hangupStarted[job]?.compareAndSet(false, true) == true) {
           withContext(NonCancellable) {
-            withTimeout(5_000) {
+            withTimeout(5_000.milliseconds) {
               openAiHttpService.disconnect(callId)
             }
           }

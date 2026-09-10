@@ -39,17 +39,41 @@ class OpenAiHttpServiceTest {
     }
 
   @Test
-  fun `disconnect propagates hangup failure`() =
+  fun `disconnect succeeds when call is already missing`() =
     runTest {
       val client =
         WebClient
           .builder()
           .exchangeFunction {
-            Mono.just(ClientResponse.create(HttpStatus.NOT_FOUND).build())
+            Mono.just(ClientResponse.create(HttpStatus.NOT_FOUND).body("Call not found").build())
           }.build()
 
-      assertFailsWith<WebClientResponseException.NotFound> {
-        OpenAiHttpService(client, McpProperties(apiKey = "server-key")).disconnect("rtc_missing")
+      val service = OpenAiHttpService(client, McpProperties(apiKey = "server-key"))
+      service.disconnect("rtc_missing")
+      service.disconnect("rtc_missing")
+    }
+
+  @Test
+  fun `disconnect propagates other hangup failures`() =
+    runTest {
+      for (status in listOf(
+        HttpStatus.UNAUTHORIZED,
+        HttpStatus.FORBIDDEN,
+        HttpStatus.TOO_MANY_REQUESTS,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      )) {
+        val client =
+          WebClient
+            .builder()
+            .exchangeFunction {
+              Mono.just(ClientResponse.create(status).build())
+            }.build()
+
+        val failure =
+          assertFailsWith<WebClientResponseException> {
+            OpenAiHttpService(client, McpProperties(apiKey = "server-key")).disconnect("rtc_test")
+          }
+        assertEquals(status, failure.statusCode)
       }
     }
 }

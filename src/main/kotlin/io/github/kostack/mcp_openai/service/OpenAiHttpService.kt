@@ -8,12 +8,14 @@ import io.github.kostack.mcp_openai.utils.HttpRetryUtils
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.client.MultipartBodyBuilder
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.awaitBody
 import org.springframework.web.reactive.function.client.toEntity
 import org.springframework.web.util.UriComponentsBuilder
+import reactor.core.publisher.Mono
 
 class OpenAiHttpService(
   private val webClient: WebClient,
@@ -68,6 +70,8 @@ class OpenAiHttpService(
       .uri(uri)
       .header(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
       .retrieve()
+      // The call may already have ended before the hangup request arrives.
+      .onStatus({ it == HttpStatus.NOT_FOUND }) { Mono.empty() }
       .toBodilessEntity()
       .awaitSingle()
   }
