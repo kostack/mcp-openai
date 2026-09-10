@@ -184,10 +184,12 @@ class McpOpenAiAutoConfiguration {
       handler.createCall(request.awaitBody<RealtimeCallRequest>())
     }
 
+    // remove
     POST("${properties.sidebandPrefix}/token") { request ->
       handler.createToken(request.awaitBody<TokenRequest>())
     }
 
+    // remove
     POST("${properties.sidebandPrefix}/connect") { request ->
       handler.connect(request.awaitBody<SidebandConnectRequest>())
     }

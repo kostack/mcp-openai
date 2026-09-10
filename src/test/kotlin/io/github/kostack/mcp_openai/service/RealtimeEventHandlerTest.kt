@@ -267,15 +267,20 @@ class RealtimeEventHandlerTest {
     }
 
   @Test
-  fun `direct results acknowledge delivery without serializing result or requesting response`() =
+  fun `direct results acknowledge delivery with result without requesting response`() =
     runTest {
       val contextSlot = slot<ToolContext>()
       val sentMessages = mutableListOf<Any>()
+      val acknowledgementPayload =
+        mapOf("status" to "delivered_to_client", "result" to "Direct result")
+      val serializedAcknowledgement =
+        """{"status":"delivered_to_client","result":"Direct result"}"""
       val acknowledgement =
         RealtimeUtils.conversationFunctionOutput(
           "tool-call-1",
-          """{"status":"delivered_to_client"}"""
+          serializedAcknowledgement
         )
+      every { objectMapper.writeValueAsString(acknowledgementPayload) } returns serializedAcknowledgement
       every { websocketSessionRegistry.sendJson("call-123", capture(sentMessages)) } returns true
       for (success in listOf(true, false)) {
         for (audioEnabled in listOf(true, false)) {
@@ -302,7 +307,7 @@ class RealtimeEventHandlerTest {
       }
       coVerify(exactly = 4) { toolDispatcher.execute("lookup_account", any()) }
       assertEquals(List<Any>(4) { acknowledgement }, sentMessages)
-      verify { objectMapper wasNot Called }
+      verify(exactly = 4) { objectMapper.writeValueAsString(acknowledgementPayload) }
       verify(exactly = 4) { websocketSessionRegistry.sendJson("call-123", acknowledgement) }
       verify { suspendDispatcher wasNot Called }
     }

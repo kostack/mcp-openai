@@ -180,23 +180,21 @@ class RealtimeEventHandler(
       toolResult.success
     )
 
-    if (toolResult.mode == ToolResult.ToolResultMode.DIRECT) {
-      websocketSessionRegistry.sendJson(
-        request.callId,
-        RealtimeUtils.conversationFunctionOutput(
-          toolCallId,
-          """{"status":"delivered_to_client"}"""
+    val resultOutput =
+      if (toolResult.mode == ToolResult.ToolResultMode.DIRECT) {
+        objectMapper.writeValueAsString(
+          mapOf("status" to "delivered_to_client", "result" to toolResult.result)
         )
-      )
-      return
-    }
+      } else {
+        objectMapper.writeValueAsString(toolResult)
+      }
 
     val outputSent =
       websocketSessionRegistry.sendJson(
         request.callId,
         RealtimeUtils.conversationFunctionOutput(
           toolCallId,
-          objectMapper.writeValueAsString(toolResult)
+          resultOutput
         )
       )
 
@@ -206,6 +204,10 @@ class RealtimeEventHandler(
         request.callId,
         toolCallId
       )
+      return
+    }
+
+    if (toolResult.mode == ToolResult.ToolResultMode.DIRECT) {
       return
     }
 
