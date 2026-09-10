@@ -16,6 +16,7 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.extension.ExtendWith
@@ -345,6 +346,37 @@ class RealtimeSidebandServiceTest {
 
       coVerify(exactly = 1) { openAiHttpService.disconnect("call-123") }
     }
+
+  @Test
+  fun `destroy waits for hangup and cleanup of all calls even when one hangup fails`() {
+    val jobs = mutableListOf<Job>()
+    every { sidebandRegistry.putIfAbsent(any(), capture(jobs)) } returns null
+    mockWebSocketExecute()
+    coEvery { openAiHttpService.disconnect("call-1") } throws IllegalStateException("Hangup failed")
+    var hangupCompleted = false
+    coEvery { openAiHttpService.disconnect("call-2") } coAnswers {
+      delay(50)
+      hangupCompleted = true
+    }
+    val service = service()
+    for (callId in listOf("call-1", "call-2")) {
+      service.connect(SidebandConnectRequest(callId = callId, namespace = "crm", channel = "web", language = "en"))
+    }
+    verify(timeout = 1_000, exactly = 2) {
+      sidebandWebSocketClient.execute(any<URI>(), any<HttpHeaders>(), any<WebSocketHandler>())
+    }
+
+    service.destroy()
+    service.destroy()
+
+    assertTrue(hangupCompleted)
+    assertTrue(jobs.all { it.isCompleted })
+    for (callId in listOf("call-1", "call-2")) {
+      coVerify(exactly = 1) { openAiHttpService.disconnect(callId) }
+      verify(exactly = 1) { realtimeEventHandler.cancel(callId) }
+      verify(exactly = 1) { sidebandRegistry.remove(callId, any()) }
+    }
+  }
 
   private fun mockWebSocketExecute(
     uriSlot: io.mockk.CapturingSlot<URI> = slot(),

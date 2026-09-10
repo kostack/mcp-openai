@@ -16,12 +16,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.reactor.mono
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketMessage
@@ -144,8 +149,12 @@ class RealtimeSidebandService(
       }
     } finally {
       try {
-        if (job.isActive && hangupStarted[job]?.compareAndSet(false, true) == true) {
-          openAiHttpService.disconnect(callId)
+        if (hangupStarted[job]?.compareAndSet(false, true) == true) {
+          withContext(NonCancellable) {
+            withTimeout(5_000) {
+              openAiHttpService.disconnect(callId)
+            }
+          }
         }
       } catch (e: CancellationException) {
         throw e
@@ -173,7 +182,9 @@ class RealtimeSidebandService(
 
   @PreDestroy
   fun destroy() {
-    supervisorJob.cancel()
+    runBlocking {
+      supervisorJob.cancelAndJoin()
+    }
   }
 
   private fun sidebandUri(callId: String): URI =
