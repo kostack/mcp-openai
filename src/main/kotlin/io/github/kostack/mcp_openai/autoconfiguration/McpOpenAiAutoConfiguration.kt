@@ -2,6 +2,7 @@ package io.github.kostack.mcp_openai.autoconfiguration
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeSidebandHandler
+import io.github.kostack.mcp_openai.dto.RealtimeCallRequest
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.dto.TokenRequest
@@ -177,6 +178,10 @@ class McpOpenAiAutoConfiguration {
     handler: RealtimeSidebandHandler,
     properties: McpProperties
   ) = coRouter {
+    POST("${properties.sidebandPrefix}/calls") { request ->
+      handler.createCall(request.awaitBody<RealtimeCallRequest>())
+    }
+
     POST("${properties.sidebandPrefix}/token") { request ->
       handler.createToken(request.awaitBody<TokenRequest>())
     }

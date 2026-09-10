@@ -12,5 +12,6 @@ data class McpProperties(
     1024 * 1024,
   var model: String = "gpt-realtime-mini",
   val transcriptionModel: String = "gpt-realtime-whisper",
-  val enableAudio: Boolean = false
+  val enableAudio: Boolean = false,
+  var callsUrl: String = "https://api.openai.com/v1/realtime/calls"
 )

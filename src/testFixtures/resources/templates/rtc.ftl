@@ -176,15 +176,6 @@
     }
   }
 
-  function extractCallId(location) {
-    if (!location) throw new Error("Missing Location header");
-
-    const match = location.match(/\/v1\/realtime\/calls\/([^/?#]+)/);
-    if (!match) throw new Error("Invalid Location header: " + location);
-
-    return match[1];
-  }
-
   function sendRealtimeEvent(event) {
     if (!dc || dc.readyState !== "open") {
       throw new Error("Data channel is not open");
@@ -466,28 +457,6 @@
   async function connectRealtime() {
     addMessage("system", "Creating session...");
 
-    const tokenResponse = await fetch("/api/realtime/token", {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + authToken
-      },
-      body: JSON.stringify({
-        namespace: NAMESPACE,
-        channel,
-        audioEnabled: AUDIO_ENABLED(),
-        language: LANGUAGE
-      })
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error(await tokenResponse.text());
-    }
-
-    const tokenData = await tokenResponse.json();
-    const clientSecret = tokenData.clientSecret;
-
     pc = new RTCPeerConnection();
 
     if (AUDIO_ENABLED()) {
@@ -532,43 +501,28 @@
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
-      method: "POST",
-      body: offer.sdp,
-      headers: {
-        Authorization: `Bearer ${clientSecret}`,
-        "Content-Type": "application/sdp"
-      }
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(await sdpResponse.text());
-    }
-
-    const answerSdp = await sdpResponse.text();
-
-    await pc.setRemoteDescription({
-      type: "answer",
-      sdp: answerSdp
-    });
-
-    callId = extractCallId(sdpResponse.headers.get("Location"));
-
-    await fetch("/api/realtime/connect", {
+    const callResponse = await fetch("/api/realtime/calls", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + authToken
       },
       body: JSON.stringify({
-        clientSecret,
-        callId,
+        sdp: offer.sdp,
         namespace: NAMESPACE,
         channel,
         audioEnabled: AUDIO_ENABLED(),
         language: LANGUAGE
       })
     });
+
+    if (!callResponse.ok) {
+      throw new Error(await callResponse.text());
+    }
+
+    const call = await callResponse.json();
+    callId = call.callId;
+    await pc.setRemoteDescription({ type: "answer", sdp: call.sdp });
 
     realtimeConnected = true;
 

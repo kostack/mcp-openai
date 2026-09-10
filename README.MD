@@ -6,7 +6,7 @@ server-side Kotlin tools.
 
 Use it when you want to:
 
-- Create short-lived OpenAI Realtime client secrets from your backend.
+- Create WebRTC calls on your backend using the OpenAI unified interface.
 - Open a server-side sideband WebSocket for each Realtime call.
 - Register Kotlin tools that OpenAI can call during a conversation.
 - Return tool results back to the same Realtime conversation.
@@ -86,6 +86,7 @@ Available properties:
 | --- | --- | --- |
 | `api-key` | empty | Your server-side OpenAI API key. Do not expose this to browsers. |
 | `client-secrets-url` | `https://api.openai.com/v1/realtime/client_secrets` | OpenAI endpoint used to create ephemeral Realtime client secrets. |
+| `calls-url` | `https://api.openai.com/v1/realtime/calls` | OpenAI unified call creation endpoint. |
 | `sideband-url` | `wss://api.openai.com/v1/realtime` | OpenAI sideband WebSocket endpoint. |
 | `sideband-prefix` | `/api/realtime` | Prefix for the built-in Realtime HTTP routes. |
 | `sideband-max-frame-payload-length` | `1048576` | Maximum inbound sideband WebSocket frame payload length in bytes. Increase this if large Realtime events exceed the default. |
@@ -194,7 +195,8 @@ The package auto-configures a default `SidebandConfigurationRouter`. The
 default routes use `kostack-mcp.sideband-prefix`, which is `/api/realtime` by
 default:
 
-- `POST /api/realtime/token`
+- `POST /api/realtime/calls` (recommended: creates the call and starts sideband attachment)
+- `POST /api/realtime/token` (legacy ephemeral flow)
 - `POST /api/realtime/connect`
 - `POST /api/realtime/disconnect`
 
@@ -203,7 +205,31 @@ The handler uses `request.namespace` to select tool definitions. The default
 token instructions are intentionally restrictive; set application instructions
 in a `RealtimeEvents.TOKEN_PRE_CREATE` listener.
 
-### Create A Token
+### Create A Call (Unified Interface)
+
+Send the browser's SDP offer and application settings to your backend:
+
+```http
+POST /api/realtime/calls
+Content-Type: application/json
+
+{
+  "sdp": "v=0\r\n...",
+  "namespace": "support_assistant",
+  "channel": "conversation-123",
+  "language": "en",
+  "audioEnabled": false
+}
+```
+
+The backend runs `TOKEN_PRE_CREATE` listeners for instructions and history,
+posts multipart `sdp` and `session` fields to OpenAI using `kostack-mcp.api-key`,
+and starts the sideband with that same API key. The response contains only
+`{"sdp": "...answer SDP...", "callId": "rtc_..."}`. Apply the answer with
+`pc.setRemoteDescription()`. No separate `/token` or `/connect` request is needed.
+Sideband attachment runs asynchronously; the HTTP response does not confirm its readiness.
+
+### Create A Token (Legacy Ephemeral Flow)
 
 Request:
 
@@ -229,10 +255,11 @@ Response:
 
 Use the returned `clientSecret` only in the browser session that requested it.
 
-### Connect The Sideband
+### Connect The Sideband (Legacy Or Manual)
 
 After the browser creates the Realtime WebRTC call, send the OpenAI call id and
-the client secret to your backend.
+the client secret to your backend. For calls created with the server API key,
+omit `clientSecret` to use the configured server key instead.
 
 ```http
 POST /api/realtime/connect
@@ -275,76 +302,33 @@ Successful response:
 
 ## Browser Flow Example
 
-The browser is responsible for connecting to OpenAI Realtime with WebRTC. The
-backend is responsible for creating the ephemeral client secret and sideband
-connection.
+The browser exchanges SDP through your backend; media and data use WebRTC directly
+with OpenAI. The backend creates the call and sideband using the same server API key.
+Apply your application's authentication headers to the request below.
 
 ```javascript
-const channel = "conversation-123";
-const namespace = "support_assistant";
-const language = "en";
-
-async function createToken() {
-  const response = await fetch("/api/realtime/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      namespace,
-      channel,
-      language,
-      audioEnabled: false
-    })
-  });
-
-  return response.json();
-}
-
-function extractCallId(locationHeader) {
-  const match = locationHeader.match(/\/v1\/realtime\/calls\/([^/?#]+)/);
-  if (!match) throw new Error("Could not read Realtime call id");
-  return match[1];
-}
-
 async function connectRealtime() {
-  const { clientSecret } = await createToken();
   const pc = new RTCPeerConnection();
+  pc.addTransceiver("audio", { direction: "recvonly" });
   const dc = pc.createDataChannel("oai-events");
-
-  dc.onmessage = (event) => {
-    const realtimeEvent = JSON.parse(event.data);
-    console.log("Realtime event", realtimeEvent);
-  };
+  dc.onmessage = (event) => console.log(JSON.parse(event.data));
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-
-  const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${clientSecret}`,
-      "Content-Type": "application/sdp"
-    },
-    body: offer.sdp
-  });
-
-  const answer = await sdpResponse.text();
-  await pc.setRemoteDescription({ type: "answer", sdp: answer });
-
-  const callId = extractCallId(sdpResponse.headers.get("Location"));
-
-  await fetch("/api/realtime/connect", {
+  const response = await fetch("/api/realtime/calls", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      callId,
-      clientSecret,
-      namespace,
-      channel,
-      language,
+      sdp: offer.sdp,
+      namespace: "support_assistant",
+      channel: "conversation-123",
+      language: "en",
       audioEnabled: false
     })
   });
-
+  if (!response.ok) throw new Error(await response.text());
+  const { sdp, callId } = await response.json();
+  await pc.setRemoteDescription({ type: "answer", sdp });
   return { pc, dc, callId };
 }
 ```
@@ -439,7 +423,7 @@ Published event names:
 
 | Event | When it is published |
 | --- | --- |
-| `kostack_mcp.token.pre_create` | Before an ephemeral token is created. |
+| `kostack_mcp.token.pre_create` | Before a unified call or an ephemeral token is created. |
 | `kostack_mcp.connect` | Before the sideband connection is started. |
 | `kostack_mcp.disconnect` | Before a sideband connection is cancelled. |
 | `kostack_mcp.session.start` | After the sideband WebSocket session is available. |
@@ -563,8 +547,8 @@ class DemoRealtimeListeners {
 ## Security Notes
 
 - Keep `kostack-mcp.api-key` server-side.
-- Send only ephemeral Realtime client secrets to the browser.
-- Protect your token and sideband endpoints with your application auth.
+- The unified call flow returns only SDP and a call ID to the browser.
+- Protect your call, token, and sideband endpoints with your application auth.
 - Validate that the current user is allowed to access the requested channel.
 - Do not trust tool arguments just because they came from the model; validate
   them in your tool implementation.

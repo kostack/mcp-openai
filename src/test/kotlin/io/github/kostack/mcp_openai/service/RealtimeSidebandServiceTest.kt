@@ -47,6 +47,7 @@ class RealtimeSidebandServiceTest {
   private val sidebandWebSocketClient = mockk<WebSocketClient>()
   private val properties =
     McpProperties(
+      apiKey = "server-api-key",
       sidebandUrl = "wss://realtime.example.test/v1/realtime"
     )
 
@@ -85,6 +86,23 @@ class RealtimeSidebandServiceTest {
       )
       assertEquals("Bearer client-secret", headersSlot.captured.getFirst(HttpHeaders.AUTHORIZATION))
 
+      jobSlot.captured.cancelAndJoin()
+    }
+
+  @Test
+  fun `unified call sideband uses configured server api key`() =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      val headersSlot = slot<HttpHeaders>()
+      every { sidebandRegistry.putIfAbsent("rtc_test", capture(jobSlot)) } returns null
+      mockWebSocketExecute(headersSlot = headersSlot)
+      service().connect(
+        SidebandConnectRequest(callId = "rtc_test", namespace = "crm", channel = "web", language = "en")
+      )
+      verify(timeout = 1_000) {
+        sidebandWebSocketClient.execute(any<URI>(), any<HttpHeaders>(), any<WebSocketHandler>())
+      }
+      assertEquals("Bearer server-api-key", headersSlot.captured.getFirst(HttpHeaders.AUTHORIZATION))
       jobSlot.captured.cancelAndJoin()
     }
 

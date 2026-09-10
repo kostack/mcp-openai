@@ -29,8 +29,6 @@ class TestTool : AbstractTool() {
   override suspend fun execute(context: ToolContext): ToolResult {
     val request = context.getRequest<TestRequest>()
 
-    delay(30.seconds)
-
     val place =
       when (request.countryCode) {
         "DE" -> {

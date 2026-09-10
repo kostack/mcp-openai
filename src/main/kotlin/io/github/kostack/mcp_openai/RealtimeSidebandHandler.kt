@@ -2,6 +2,7 @@ package io.github.kostack.mcp_openai
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
+import io.github.kostack.mcp_openai.dto.RealtimeCallRequest
 import io.github.kostack.mcp_openai.dto.RealtimeTokenResponse
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
@@ -23,6 +24,35 @@ class RealtimeSidebandHandler(
   private val toolDispatcher: ToolDispatcher,
   private val properties: McpProperties
 ) {
+  suspend fun createCall(request: RealtimeCallRequest): ServerResponse {
+    val settings =
+      TokenRequest(
+        request.namespace,
+        request.channel,
+        request.language,
+        request.audioEnabled && properties.enableAudio
+      )
+    val event = RealtimeTokenPreCreateEvent(settings)
+    suspendDispatcher.publishSequential(RealtimeEvents.TOKEN_PRE_CREATE, event)
+    val call =
+      openAiHttpService.createCall(
+        request.sdp,
+        event.instructions,
+        settings.language,
+        toolDispatcher.getDefinitions(settings.namespace)
+      )
+    connect(
+      SidebandConnectRequest(
+        callId = call.callId,
+        namespace = settings.namespace,
+        channel = settings.channel,
+        language = settings.language,
+        audioEnabled = settings.audioEnabled
+      )
+    )
+    return ServerResponse.ok().bodyValueAndAwait(call)
+  }
+
   suspend fun createToken(request: TokenRequest): ServerResponse {
     if (!properties.enableAudio) request.audioEnabled = false
 
