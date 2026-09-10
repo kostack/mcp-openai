@@ -10,12 +10,12 @@ import org.springframework.stereotype.Component
 import kotlin.time.Duration.Companion.seconds
 
 @Component
-class TestTool : AbstractTool() {
+class Test2Tool : AbstractTool() {
   override val namespace: String = "default"
-  override val toolName: String = "find_person_by_country_code"
+  override val toolName: String = "describe_kostack"
   override val description: String =
     """
-    Finds the person according to provided country.
+    Describes KoStack
     """.trimIndent()
 
   override fun getDefinition(): ToolDefinition =
@@ -23,33 +23,14 @@ class TestTool : AbstractTool() {
       namespace = namespace,
       name = toolName,
       description = description,
-      parameters = ToolSchemaUtils.toParameters<TestRequest>()
+      parameters = ToolSchemaUtils.emptyParameters()
     )
 
   override suspend fun execute(context: ToolContext): ToolResult {
-    val request = context.getRequest<TestRequest>()
-
-    val place =
-      when (request.countryCode) {
-        "DE" -> {
-          "Daniel"
-        }
-
-        "GR" -> {
-          "Nikolay"
-        }
-
-        else -> {
-          "No Idea"
-        }
-      }
-    val result = TestResult(place)
-    val success = place != "No Idea"
-
+    delay(20.seconds)
     return ToolResult(
-      success = success,
-      result = result,
-      mode = ToolResult.ToolResultMode.DIRECT
+      success = true,
+      result = "KoStack is a tool created by Niko"
     )
   }
 }

@@ -419,11 +419,11 @@
       case "response.done":
         assistantResponseActive = false;
         currentResponseId = null;
-        if (!pendingFunctionCall) {
-          clearThinking();
-          streamingEl = null;
-        }
-        updateInputControls();
+        // DIRECT tools do not request a follow-up Realtime response.
+        // Actual tool completion is handled by the separate delivery flow.
+        setToolExecutionPending(false);
+        clearThinking();
+        streamingEl = null;
         break;
 
       case "error":

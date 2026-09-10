@@ -5,6 +5,7 @@ import io.github.kostack.mcp_openai.RealtimeEvents
 import io.github.kostack.mcp_openai.dto.RealtimeEvent
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.ToolContext
+import io.github.kostack.mcp_openai.dto.ToolResult
 import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
@@ -162,11 +163,11 @@ class RealtimeEventHandler(
 
     val context =
       ToolContext(
-        request.namespace,
-        request.channel,
-        request.callId,
-        toolCallId,
-        rawArguments
+        namespace = request.namespace,
+        channel = request.channel,
+        sessionId = request.callId,
+        toolCallId = toolCallId,
+        rawRequest = rawArguments
       )
     val toolResult = toolDispatcher.execute(toolName, context)
 
@@ -178,6 +179,17 @@ class RealtimeEventHandler(
       request.callId,
       toolResult.success
     )
+
+    if (toolResult.mode == ToolResult.ToolResultMode.DIRECT) {
+      websocketSessionRegistry.sendJson(
+        request.callId,
+        RealtimeUtils.conversationFunctionOutput(
+          toolCallId,
+          """{"status":"delivered_to_client"}"""
+        )
+      )
+      return
+    }
 
     val outputSent =
       websocketSessionRegistry.sendJson(

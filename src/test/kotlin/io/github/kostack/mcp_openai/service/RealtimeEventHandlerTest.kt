@@ -11,6 +11,7 @@ import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
+import io.mockk.Called
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -19,6 +20,7 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
@@ -262,6 +264,47 @@ class RealtimeEventHandlerTest {
       coVerify(exactly = 1) {
         suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_ERROR, any())
       }
+    }
+
+  @Test
+  fun `direct results acknowledge delivery without serializing result or requesting response`() =
+    runTest {
+      val contextSlot = slot<ToolContext>()
+      val sentMessages = mutableListOf<Any>()
+      val acknowledgement =
+        RealtimeUtils.conversationFunctionOutput(
+          "tool-call-1",
+          """{"status":"delivered_to_client"}"""
+        )
+      every { websocketSessionRegistry.sendJson("call-123", capture(sentMessages)) } returns true
+      for (success in listOf(true, false)) {
+        for (audioEnabled in listOf(true, false)) {
+          val result = ToolResult(success, "Direct result", ToolResult.ToolResultMode.DIRECT)
+          coEvery { toolDispatcher.execute("lookup_account", capture(contextSlot)) } returns result
+          val handler = handler()
+          try {
+            handler.handle(
+              RealtimeEvent(
+                type = "response.function_call_arguments.done",
+                name = "lookup_account",
+                callId = "tool-call-1"
+              ),
+              request(audioEnabled)
+            )
+          } finally {
+            handler.destroy()
+          }
+          assertEquals(
+            ToolContext("crm", "web", "call-123", "tool-call-1", "{}"),
+            contextSlot.captured
+          )
+        }
+      }
+      coVerify(exactly = 4) { toolDispatcher.execute("lookup_account", any()) }
+      assertEquals(List<Any>(4) { acknowledgement }, sentMessages)
+      verify { objectMapper wasNot Called }
+      verify(exactly = 4) { websocketSessionRegistry.sendJson("call-123", acknowledgement) }
+      verify { suspendDispatcher wasNot Called }
     }
 
   private fun handler(): RealtimeEventHandler =

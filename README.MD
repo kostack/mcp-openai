@@ -187,7 +187,30 @@ class WeatherTool : AbstractTool() {
 ```
 
 When OpenAI calls `get_weather`, the package decodes the JSON arguments into
-`WeatherRequest`, runs `execute`, and sends the `ToolResult` back to OpenAI.
+`WeatherRequest` and runs `execute`. `ToolResult.mode` controls what happens next:
+
+| Mode | Behavior |
+| --- | --- |
+| `REALTIME` (default) | Sends the result back to OpenAI and requests an assistant response using the session's current modality. |
+| `DIRECT` | Returns without sending the result to OpenAI or requesting an assistant response. Your tool/application handles client delivery, for example through SSE. |
+
+For direct delivery, send the result through your application's SSE layer within
+your tool implementation, then return:
+
+```kotlin
+return ToolResult(
+  success = true,
+  result = result,
+  mode = ToolResult.ToolResultMode.DIRECT
+)
+```
+
+Use `context.channel` and `context.sessionId` to route the SSE message and
+`context.toolCallId` to correlate it with the function call. `DIRECT` does not
+publish an application event or provide an SSE endpoint. It applies to both
+successful and failed results. Exceptions handled by `ToolDispatcher` produce a
+failed result with the default `REALTIME` mode; return a failed `DIRECT` result
+explicitly when your tool handles and delivers an error itself.
 
 ## Backend Routes
 
