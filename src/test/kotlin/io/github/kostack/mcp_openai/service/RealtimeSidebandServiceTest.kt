@@ -33,11 +33,13 @@ import tools.jackson.databind.ObjectMapper
 import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @ExtendWith(OutputCaptureExtension::class)
 class RealtimeSidebandServiceTest {
+  private val openAiHttpService = mockk<OpenAiHttpService>(relaxed = true)
   private val sidebandRegistry = mockk<SidebandSessionRegistry>(relaxed = true)
   private val heartbeatRegistry = mockk<SidebandHeartbeatRegistry>(relaxed = true)
   private val sessionRegistry = mockk<WebSocketSessionRegistry>(relaxed = true)
@@ -177,7 +179,7 @@ class RealtimeSidebandServiceTest {
     }
 
   @Test
-  fun `disconnect cancels sideband job`() =
+  fun `disconnect hangs up call and cancels sideband job`() =
     runTest {
       val request =
         SidebandDisconnectRequest(
@@ -188,7 +190,21 @@ class RealtimeSidebandServiceTest {
 
       service().disconnect(request)
 
+      coVerify(exactly = 1) { openAiHttpService.disconnect(request.callId) }
       coVerify(exactly = 0) { suspendDispatcher.publishSequential(any(), any()) }
+      verify(exactly = 1) { sidebandRegistry.cancel(request.callId) }
+    }
+
+  @Test
+  fun `disconnect cancels sideband job when hangup fails`() =
+    runTest {
+      val request = SidebandDisconnectRequest(callId = "call-123", namespace = "crm", channel = "web")
+      val failure = IllegalStateException("Hangup failed")
+      coEvery { openAiHttpService.disconnect(request.callId) } throws failure
+
+      val thrown = assertFailsWith<IllegalStateException> { service().disconnect(request) }
+
+      assertEquals(failure, thrown)
       verify(exactly = 1) { sidebandRegistry.cancel(request.callId) }
     }
 
@@ -274,6 +290,62 @@ class RealtimeSidebandServiceTest {
       assertFalse(output.all.contains("Sideband failed callId=call-123"))
     }
 
+  @Test
+  fun `remote close hangs up call and removes sideband job`() =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      every { sidebandRegistry.putIfAbsent("call-123", capture(jobSlot)) } returns null
+      every {
+        sidebandWebSocketClient.execute(any<URI>(), any<HttpHeaders>(), any<WebSocketHandler>())
+      } returns Mono.empty()
+
+      service().connect(
+        SidebandConnectRequest(callId = "call-123", namespace = "crm", channel = "web", language = "en")
+      )
+      jobSlot.captured.join()
+
+      coVerify(exactly = 1) { openAiHttpService.disconnect("call-123") }
+      verify(exactly = 1) { sidebandRegistry.remove("call-123", jobSlot.captured) }
+    }
+
+  @Test
+  fun `connection failure cleans up even when hangup fails`() =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      every { sidebandRegistry.putIfAbsent("call-123", capture(jobSlot)) } returns null
+      mockWebSocketExecuteFailure(IllegalStateException("Connection dropped"))
+      coEvery { openAiHttpService.disconnect("call-123") } throws IllegalStateException("Hangup failed")
+
+      service().connect(
+        SidebandConnectRequest(callId = "call-123", namespace = "crm", channel = "web", language = "en")
+      )
+      jobSlot.captured.join()
+
+      coVerify(exactly = 1) { openAiHttpService.disconnect("call-123") }
+      verify(exactly = 1) { realtimeEventHandler.cancel("call-123") }
+      verify(exactly = 1) { sidebandRegistry.remove("call-123", jobSlot.captured) }
+    }
+
+  @Test
+  fun `explicit disconnect hangs up connected call only once`() =
+    runBlocking {
+      val jobSlot = slot<Job>()
+      every { sidebandRegistry.putIfAbsent("call-123", capture(jobSlot)) } returns null
+      every { sidebandRegistry.get("call-123") } answers { jobSlot.captured }
+      every { sidebandRegistry.cancel("call-123") } answers { jobSlot.captured.cancel() }
+      mockWebSocketExecute()
+      val service = service()
+      service.connect(SidebandConnectRequest(callId = "call-123", namespace = "crm", channel = "web", language = "en"))
+      verify(timeout = 1_000) {
+        sidebandWebSocketClient.execute(any<URI>(), any<HttpHeaders>(), any<WebSocketHandler>())
+      }
+
+      service.disconnect(SidebandDisconnectRequest(callId = "call-123", namespace = "crm", channel = "web"))
+      jobSlot.captured.join()
+
+      coVerify(exactly = 1) { openAiHttpService.disconnect("call-123") }
+    }
+
   private fun mockWebSocketExecute(
     uriSlot: io.mockk.CapturingSlot<URI> = slot(),
     headersSlot: io.mockk.CapturingSlot<HttpHeaders> = slot()
@@ -306,6 +378,7 @@ class RealtimeSidebandServiceTest {
       realtimeEventHandler = realtimeEventHandler,
       suspendDispatcher = suspendDispatcher,
       client = sidebandWebSocketClient,
-      heartbeatRegistry = heartbeatRegistry
+      heartbeatRegistry = heartbeatRegistry,
+      openAiHttpService = openAiHttpService
     )
 }

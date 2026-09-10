@@ -5,9 +5,7 @@ import io.github.kostack.mcp_openai.dto.ToolDefinition
 import io.github.kostack.mcp_openai.dto.ToolResult
 import io.github.kostack.mcp_openai.tool.AbstractTool
 import io.github.kostack.mcp_openai.utils.ToolSchemaUtils
-import kotlinx.coroutines.delay
 import org.springframework.stereotype.Component
-import kotlin.time.Duration.Companion.seconds
 
 @Component
 class Test2Tool : AbstractTool() {
@@ -26,11 +24,9 @@ class Test2Tool : AbstractTool() {
       parameters = ToolSchemaUtils.emptyParameters()
     )
 
-  override suspend fun execute(context: ToolContext): ToolResult {
-    delay(20.seconds)
-    return ToolResult(
+  override suspend fun execute(context: ToolContext): ToolResult =
+    ToolResult(
       success = true,
       result = "KoStack is a tool created by Niko"
     )
-  }
 }

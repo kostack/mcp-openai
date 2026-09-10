@@ -53,6 +53,7 @@ class RealtimeSidebandHandler(
     return ServerResponse.ok().bodyValueAndAwait(call)
   }
 
+  // legacy
   suspend fun createToken(request: TokenRequest): ServerResponse {
     if (!properties.enableAudio) request.audioEnabled = false
 
@@ -74,6 +75,7 @@ class RealtimeSidebandHandler(
       .bodyValueAndAwait(token)
   }
 
+  // legacy
   suspend fun connect(request: SidebandConnectRequest): ServerResponse {
     if (!properties.enableAudio) request.audioEnabled = false
     suspendDispatcher.publishSequential(RealtimeEvents.CONNECT, RealtimeConnectEvent(request))

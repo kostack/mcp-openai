@@ -13,6 +13,7 @@ import org.springframework.http.client.MultipartBodyBuilder
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.awaitBody
 import org.springframework.web.reactive.function.client.toEntity
+import org.springframework.web.util.UriComponentsBuilder
 
 class OpenAiHttpService(
   private val webClient: WebClient,
@@ -53,6 +54,25 @@ class OpenAiHttpService(
     return RealtimeCallResponse(answer, callId)
   }
 
+  suspend fun disconnect(callId: String) {
+    require(callId.isNotBlank()) { "Call ID must not be blank" }
+    val uri =
+      UriComponentsBuilder
+        .fromUriString(mcpProperties.callsUrl.trimEnd('/'))
+        .pathSegment("{callId}", "hangup")
+        .encode()
+        .buildAndExpand(callId)
+        .toUri()
+    webClient
+      .post()
+      .uri(uri)
+      .header(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
+      .retrieve()
+      .toBodilessEntity()
+      .awaitSingle()
+  }
+
+  // legacy
   suspend fun createEphemeralToken(
     instructions: String,
     language: String,

@@ -137,6 +137,7 @@ class McpOpenAiAutoConfiguration {
     realtimeEventHandler: RealtimeEventHandler,
     suspendDispatcher: SuspendDispatcher,
     sidebandHeartbeatRegistry: SidebandHeartbeatRegistry,
+    openAiHttpService: OpenAiHttpService,
     @Qualifier("realtimeSidebandWebSocketClient") sidebandWebSocketClient: WebSocketClient
   ): RealtimeSidebandService =
     RealtimeSidebandService(
@@ -147,7 +148,8 @@ class McpOpenAiAutoConfiguration {
       realtimeEventHandler,
       suspendDispatcher,
       sidebandWebSocketClient,
-      sidebandHeartbeatRegistry
+      sidebandHeartbeatRegistry,
+      openAiHttpService
     )
 
   @Bean

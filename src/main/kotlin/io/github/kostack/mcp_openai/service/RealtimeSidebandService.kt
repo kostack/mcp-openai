@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
@@ -30,6 +31,8 @@ import org.springframework.web.util.UriComponentsBuilder
 import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class RealtimeSidebandService(
   private val mcpProperties: McpProperties,
@@ -39,10 +42,13 @@ class RealtimeSidebandService(
   private val realtimeEventHandler: RealtimeEventHandler,
   private val suspendDispatcher: SuspendDispatcher,
   private val client: WebSocketClient,
-  private val heartbeatRegistry: SidebandHeartbeatRegistry
+  private val heartbeatRegistry: SidebandHeartbeatRegistry,
+  private val openAiHttpService: OpenAiHttpService
 ) {
   private val supervisorJob = SupervisorJob()
   private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
+
+  private val hangupStarted = ConcurrentHashMap<Job, AtomicBoolean>()
 
   fun connect(request: SidebandConnectRequest) {
     val callId = request.callId
@@ -59,6 +65,8 @@ class RealtimeSidebandService(
       return
     }
 
+    hangupStarted[job] = AtomicBoolean()
+    job.invokeOnCompletion { hangupStarted.remove(job) }
     job.start()
   }
 
@@ -135,15 +143,32 @@ class RealtimeSidebandService(
         log.error("Sideband failed callId={}, error={}", callId, e.message, e)
       }
     } finally {
-      realtimeEventHandler.cancel(callId)
-      log.info("Sideband closed callId={}", callId)
-      websocketSession?.let { sessionRegistry.remove(callId, it) }
-      sidebandRegistry.remove(callId, job)
+      try {
+        if (job.isActive && hangupStarted[job]?.compareAndSet(false, true) == true) {
+          openAiHttpService.disconnect(callId)
+        }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        log.warn("Failed to hang up dropped sideband callId={}", callId, e)
+      } finally {
+        realtimeEventHandler.cancel(callId)
+        log.info("Sideband closed callId={}", callId)
+        websocketSession?.let { sessionRegistry.remove(callId, it) }
+        sidebandRegistry.remove(callId, job)
+      }
     }
   }
 
-  fun disconnect(request: SidebandDisconnectRequest) {
-    sidebandRegistry.cancel(request.callId)
+  suspend fun disconnect(request: SidebandDisconnectRequest) {
+    try {
+      val state = sidebandRegistry.get(request.callId)?.let { hangupStarted[it] }
+      if (state == null || state.compareAndSet(false, true)) {
+        openAiHttpService.disconnect(request.callId)
+      }
+    } finally {
+      sidebandRegistry.cancel(request.callId)
+    }
   }
 
   @PreDestroy
