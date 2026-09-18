@@ -22,14 +22,27 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import tools.jackson.databind.ObjectMapper
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RealtimeEventHandlerTest {
+  private val handlers = mutableListOf<RealtimeEventHandler>()
+
+  @AfterTest
+  fun tearDown() {
+    handlers.forEach { it.destroy() }
+  }
+
   private val objectMapper = mockk<ObjectMapper>()
   private val toolDispatcher = mockk<ToolDispatcher>()
   private val websocketSessionRegistry = mockk<WebSocketSessionRegistry>()
@@ -60,11 +73,13 @@ class RealtimeEventHandlerTest {
       val handler = handler()
       handler.handleInbound(event, request)
 
+      runCurrent()
       toolStarted.await()
       coVerify(exactly = 1) { toolDispatcher.execute("lookup_account", any()) }
       coVerify(exactly = 0) { websocketSessionRegistry.sendJson(any(), any()) }
 
       handler.cancel(request.callId)
+      runCurrent()
       toolCancelled.await()
     }
 
@@ -76,16 +91,17 @@ class RealtimeEventHandlerTest {
       val eventSlot = slot<RealtimeHandlerEvent>()
 
       coEvery {
-        suspendDispatcher.publishSequential(RealtimeEvents.SESSION_UPDATED, capture(eventSlot))
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, capture(eventSlot))
       } just Runs
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertSame(event, eventSlot.captured.realtimeEvent)
       assertSame(request, eventSlot.captured.request)
       assertEquals("crm", eventSlot.captured.request.namespace)
       coVerify(exactly = 1) {
-        suspendDispatcher.publishSequential(RealtimeEvents.SESSION_UPDATED, any())
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, any())
       }
     }
 
@@ -106,18 +122,19 @@ class RealtimeEventHandlerTest {
 
       coEvery {
         suspendDispatcher.publishSequential(
-          RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE,
+          RealtimeEvents.REALTIME_EVENT,
           capture(handlerEventSlot)
         )
       } just Runs
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertSame(event, handlerEventSlot.captured.realtimeEvent)
       assertSame(request, handlerEventSlot.captured.request)
       assertEquals("crm", handlerEventSlot.captured.request.namespace)
       coVerify(exactly = 1) {
-        suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE, any())
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, any())
       }
       coVerify(exactly = 0) { toolDispatcher.execute(any(), any()) }
     }
@@ -134,8 +151,8 @@ class RealtimeEventHandlerTest {
           arguments = arguments
         )
       val request = request()
-      val toolResult = ToolResult(success = true, result = mapOf("status" to "found"))
-      val serializedToolResult = """{"success":true,"result":{"status":"found"}}"""
+      val toolResult = ToolResult(result = mapOf("status" to "found"))
+      val serializedToolResult = """{"result":{"status":"found"},"mode":"REALTIME"}"""
       val contextSlot = slot<ToolContext>()
       val sentMessages = mutableListOf<Any>()
       val expectedMessages: List<Any> =
@@ -148,7 +165,8 @@ class RealtimeEventHandlerTest {
       every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
       coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } returns true
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertEquals(
         ToolContext(
@@ -176,16 +194,17 @@ class RealtimeEventHandlerTest {
       val eventSlot = slot<RealtimeHandlerEvent>()
 
       coEvery {
-        suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE, capture(eventSlot))
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, capture(eventSlot))
       } just Runs
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertSame(event, eventSlot.captured.realtimeEvent)
       assertSame(request, eventSlot.captured.request)
       assertEquals("crm", eventSlot.captured.request.namespace)
       coVerify(exactly = 1) {
-        suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE, any())
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, any())
       }
       coVerify(exactly = 0) { toolDispatcher.execute(any(), any()) }
     }
@@ -202,8 +221,8 @@ class RealtimeEventHandlerTest {
           arguments = arguments
         )
       val request = request(audioEnabled = true)
-      val toolResult = ToolResult(success = true, result = mapOf("status" to "found"))
-      val serializedToolResult = """{"success":true,"result":{"status":"found"}}"""
+      val toolResult = ToolResult(result = mapOf("status" to "found"))
+      val serializedToolResult = """{"result":{"status":"found"},"mode":"REALTIME"}"""
       val sentMessages = mutableListOf<Any>()
 
       request.audioEnabled = false
@@ -211,7 +230,8 @@ class RealtimeEventHandlerTest {
       every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
       coEvery { websocketSessionRegistry.sendJson(request.callId, capture(sentMessages)) } returns true
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertEquals(RealtimeUtils.createResponse("text"), sentMessages[1])
     }
@@ -228,8 +248,8 @@ class RealtimeEventHandlerTest {
           arguments = arguments
         )
       val request = request()
-      val toolResult = ToolResult(success = true, result = mapOf("status" to "found"))
-      val serializedToolResult = """{"success":true,"result":{"status":"found"}}"""
+      val toolResult = ToolResult(result = mapOf("status" to "found"))
+      val serializedToolResult = """{"result":{"status":"found"},"mode":"REALTIME"}"""
       val expectedOutput =
         RealtimeUtils.conversationFunctionOutput("tool-call-1", serializedToolResult)
 
@@ -237,7 +257,8 @@ class RealtimeEventHandlerTest {
       every { objectMapper.writeValueAsString(toolResult) } returns serializedToolResult
       coEvery { websocketSessionRegistry.sendJson(request.callId, expectedOutput) } returns false
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       coVerify(exactly = 1) { websocketSessionRegistry.sendJson(request.callId, expectedOutput) }
       coVerify(exactly = 0) {
@@ -253,16 +274,17 @@ class RealtimeEventHandlerTest {
       val eventSlot = slot<RealtimeHandlerEvent>()
 
       coEvery {
-        suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_ERROR, capture(eventSlot))
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, capture(eventSlot))
       } just Runs
 
-      handler().handle(event = event, request = request)
+      handler().handleInbound(event = event, request = request)
+      runCurrent()
 
       assertSame(event, eventSlot.captured.realtimeEvent)
       assertSame(request, eventSlot.captured.request)
       assertEquals("crm", eventSlot.captured.request.namespace)
       coVerify(exactly = 1) {
-        suspendDispatcher.publishSequential(RealtimeEvents.RESPONSE_ERROR, any())
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, any())
       }
     }
 
@@ -282,48 +304,146 @@ class RealtimeEventHandlerTest {
         )
       every { objectMapper.writeValueAsString(acknowledgementPayload) } returns serializedAcknowledgement
       every { websocketSessionRegistry.sendJson("call-123", capture(sentMessages)) } returns true
-      for (success in listOf(true, false)) {
-        for (audioEnabled in listOf(true, false)) {
-          val result = ToolResult(success, "Direct result", ToolResult.ToolResultMode.DIRECT)
-          coEvery { toolDispatcher.execute("lookup_account", capture(contextSlot)) } returns result
-          val handler = handler()
-          try {
-            handler.handle(
-              RealtimeEvent(
-                type = "response.function_call_arguments.done",
-                name = "lookup_account",
-                callId = "tool-call-1"
-              ),
-              request(audioEnabled)
-            )
-          } finally {
-            handler.destroy()
-          }
-          assertEquals(
-            ToolContext("crm", "web", "call-123", "tool-call-1", "{}"),
-            contextSlot.captured
+      for (audioEnabled in listOf(true, false)) {
+        val result = ToolResult("Direct result", ToolResult.ToolResultMode.DIRECT)
+        coEvery { toolDispatcher.execute("lookup_account", capture(contextSlot)) } returns result
+        val handler = handler()
+        try {
+          handler.handleInbound(
+            RealtimeEvent(
+              type = "response.function_call_arguments.done",
+              name = "lookup_account",
+              callId = "tool-call-1"
+            ),
+            request(audioEnabled)
           )
+          runCurrent()
+        } finally {
+          handler.destroy()
         }
+        assertEquals(
+          ToolContext("crm", "web", "call-123", "tool-call-1", "{}"),
+          contextSlot.captured
+        )
       }
-      coVerify(exactly = 4) { toolDispatcher.execute("lookup_account", any()) }
-      assertEquals(List<Any>(4) { acknowledgement }, sentMessages)
-      verify(exactly = 4) { objectMapper.writeValueAsString(acknowledgementPayload) }
-      verify(exactly = 4) { websocketSessionRegistry.sendJson("call-123", acknowledgement) }
+      coVerify(exactly = 2) { toolDispatcher.execute("lookup_account", any()) }
+      assertEquals(List<Any>(2) { acknowledgement }, sentMessages)
+      verify(exactly = 2) { objectMapper.writeValueAsString(acknowledgementPayload) }
+      verify(exactly = 2) { websocketSessionRegistry.sendJson("call-123", acknowledgement) }
       verify { suspendDispatcher wasNot Called }
     }
 
-  private fun handler(): RealtimeEventHandler =
+  @Test
+  fun `all non tool events publish on the shared topic`() =
+    runTest {
+      val events =
+        listOf(
+          "session.updated",
+          "response.created",
+          "response.done",
+          "conversation.item.done",
+          "conversation.item.input_audio_transcription.completed",
+          "response.output_item.done",
+          "error",
+          "custom.event"
+        ).map { RealtimeEvent(type = it) }
+      val published = mutableListOf<RealtimeHandlerEvent>()
+      val request = request()
+      coEvery {
+        suspendDispatcher.publishSequential(RealtimeEvents.REALTIME_EVENT, capture(published))
+      } just Runs
+      val handler = handler()
+
+      events.forEach { handler.handleInbound(it, request) }
+
+      assertEquals(events, published.map { it.realtimeEvent })
+      published.forEach { assertSame(request, it.request) }
+      coVerify(exactly = 0) { toolDispatcher.execute(any(), any()) }
+    }
+
+  @Test
+  fun `malformed tool calls do not execute or publish`() =
+    runTest {
+      val handler = handler()
+      handler.handleInbound(
+        RealtimeEvent(type = "response.function_call_arguments.done", name = "lookup_account"),
+        request()
+      )
+      handler.handleInbound(
+        RealtimeEvent(type = "response.function_call_arguments.done", callId = "tool-call-1"),
+        request()
+      )
+      runCurrent()
+
+      verify { toolDispatcher wasNot Called }
+      verify { websocketSessionRegistry wasNot Called }
+      verify { suspendDispatcher wasNot Called }
+    }
+
+  @Test
+  fun `cancelling one session leaves other sessions running and destroy cancels all`() =
+    runTest {
+      val started = mutableListOf<String>()
+      val cancelled = mutableListOf<String>()
+      coEvery { toolDispatcher.execute(any(), any()) } coAnswers {
+        val context = secondArg<ToolContext>()
+        started.add(context.sessionId)
+        try {
+          awaitCancellation()
+        } finally {
+          cancelled.add(context.sessionId)
+        }
+      }
+      val handler = handler()
+      val event =
+        RealtimeEvent(type = "response.function_call_arguments.done", name = "lookup_account", callId = "tool-call-1")
+      handler.handleInbound(event, request())
+      handler.handleInbound(event, request().copy(callId = "call-456"))
+      runCurrent()
+      assertEquals(listOf("call-123", "call-456"), started)
+
+      handler.cancel("call-123")
+      runCurrent()
+      assertEquals(listOf("call-123"), cancelled)
+
+      handler.destroy()
+      runCurrent()
+      assertEquals(listOf("call-123", "call-456"), cancelled)
+      verify { websocketSessionRegistry wasNot Called }
+    }
+
+  @Test
+  fun `tool failure does not cancel sibling calls`() =
+    runTest {
+      val handler = handler()
+      coEvery { toolDispatcher.execute("failing", any()) } throws IllegalStateException("failed")
+      coEvery { toolDispatcher.execute("waiting", any()) } coAnswers { awaitCancellation() }
+      handler.handleInbound(
+        RealtimeEvent(type = "response.function_call_arguments.done", name = "failing", callId = "tool-1"),
+        request()
+      )
+      handler.handleInbound(
+        RealtimeEvent(type = "response.function_call_arguments.done", name = "waiting", callId = "tool-2"),
+        request()
+      )
+      runCurrent()
+
+      coVerify(exactly = 1) { toolDispatcher.execute("waiting", any()) }
+      verify { websocketSessionRegistry wasNot Called }
+    }
+
+  private fun TestScope.handler(): RealtimeEventHandler =
     RealtimeEventHandler(
       objectMapper = objectMapper,
       toolDispatcher = toolDispatcher,
       websocketSessionRegistry = websocketSessionRegistry,
-      suspendDispatcher = suspendDispatcher
-    )
+      suspendDispatcher = suspendDispatcher,
+      toolDispatcherContext = StandardTestDispatcher(testScheduler)
+    ).also { handlers.add(it) }
 
   private fun request(audioEnabled: Boolean = false): SidebandConnectRequest =
     SidebandConnectRequest(
       callId = "call-123",
-      clientSecret = "client-secret",
       namespace = "crm",
       channel = "web",
       language = "en",

@@ -5,9 +5,7 @@ import io.github.kostack.mcp_openai.dto.ToolDefinition
 import io.github.kostack.mcp_openai.dto.ToolResult
 import io.github.kostack.mcp_openai.tool.AbstractTool
 import io.github.kostack.mcp_openai.utils.ToolSchemaUtils
-import kotlinx.coroutines.delay
 import org.springframework.stereotype.Component
-import kotlin.time.Duration.Companion.seconds
 
 @Component
 class TestTool : AbstractTool() {
@@ -44,10 +42,8 @@ class TestTool : AbstractTool() {
         }
       }
     val result = TestResult(place)
-    val success = place != "No Idea"
 
     return ToolResult(
-      success = success,
       result = result,
       mode = ToolResult.ToolResultMode.DIRECT
     )

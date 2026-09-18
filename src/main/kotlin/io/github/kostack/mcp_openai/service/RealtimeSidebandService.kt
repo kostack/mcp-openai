@@ -79,11 +79,10 @@ class RealtimeSidebandService(
   private suspend fun runSideband(request: SidebandConnectRequest) {
     val callId = request.callId
     val job = currentCoroutineContext().job
-    val clientSecret = request.clientSecret.ifEmpty { mcpProperties.apiKey }
     val uri = sidebandUri(callId)
     val headers =
       HttpHeaders().apply {
-        add(HttpHeaders.AUTHORIZATION, "Bearer $clientSecret")
+        add(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
       }
     var websocketSession: WebSocketSession? = null
 

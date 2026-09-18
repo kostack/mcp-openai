@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertSame
 
 class ToolDispatcherTest {
@@ -28,7 +27,7 @@ class ToolDispatcherTest {
           toolCallId = "tool-call-1",
           rawRequest = """{"id":1}"""
         )
-      val expectedResult = ToolResult(success = true, result = "created")
+      val expectedResult = ToolResult(result = "created")
       val matchingTool = tool("crm", "create_contact")
       val otherNamespaceTool = tool("support", "create_contact")
       val otherNameTool = tool("crm", "delete_contact")
@@ -59,7 +58,7 @@ class ToolDispatcherTest {
 
       val result = dispatcher.execute("create_contact", context)
 
-      assertFalse(result.success)
+      assertEquals(ToolResult.ToolResultMode.REALTIME, result.mode)
       assertEquals("Error executing tool: create_contact, error: Unknown tool: create_contact", result.result)
     }
 
@@ -81,7 +80,7 @@ class ToolDispatcherTest {
 
       val result = dispatcher.execute("create_contact", context)
 
-      assertFalse(result.success)
+      assertEquals(ToolResult.ToolResultMode.REALTIME, result.mode)
       assertEquals(
         "Error executing tool: create_contact, error: backend unavailable",
         result.result

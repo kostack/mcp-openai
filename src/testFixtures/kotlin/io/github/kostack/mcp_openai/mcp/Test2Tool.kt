@@ -26,7 +26,6 @@ class Test2Tool : AbstractTool() {
 
   override suspend fun execute(context: ToolContext): ToolResult =
     ToolResult(
-      success = true,
       result = "KoStack is a tool created by Niko"
     )
 }

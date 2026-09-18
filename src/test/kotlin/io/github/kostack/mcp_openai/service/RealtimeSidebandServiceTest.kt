@@ -63,7 +63,6 @@ class RealtimeSidebandServiceTest {
       val request =
         SidebandConnectRequest(
           callId = "call-123",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"
@@ -87,7 +86,7 @@ class RealtimeSidebandServiceTest {
         URI.create("wss://realtime.example.test/v1/realtime?call_id=call-123"),
         uriSlot.captured
       )
-      assertEquals("Bearer client-secret", headersSlot.captured.getFirst(HttpHeaders.AUTHORIZATION))
+      assertEquals("Bearer server-api-key", headersSlot.captured.getFirst(HttpHeaders.AUTHORIZATION))
 
       jobSlot.captured.cancelAndJoin()
     }
@@ -117,7 +116,6 @@ class RealtimeSidebandServiceTest {
       val request =
         SidebandConnectRequest(
           callId = "call-123",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"
@@ -152,7 +150,6 @@ class RealtimeSidebandServiceTest {
       val request =
         SidebandConnectRequest(
           callId = "call 123&next=value",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"
@@ -220,7 +217,6 @@ class RealtimeSidebandServiceTest {
       val request =
         SidebandConnectRequest(
           callId = "call-123",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"
@@ -274,7 +270,6 @@ class RealtimeSidebandServiceTest {
       val request =
         SidebandConnectRequest(
           callId = "call-123",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"

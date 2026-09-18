@@ -30,7 +30,7 @@ class ToolDispatcher(
       throw e
     } catch (e: Exception) {
       log.error("Error executing tool: $name, args: ${context.rawRequest}, error: ${e.message}", e)
-      return ToolResult(success = false, "Error executing tool: $name, error: ${e.message}")
+      return ToolResult(result = "Error executing tool: $name, error: ${e.message}")
     }
   }
 

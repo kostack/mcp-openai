@@ -2,9 +2,7 @@ package io.github.kostack.mcp_openai.service
 
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.RealtimeCallResponse
-import io.github.kostack.mcp_openai.dto.RealtimeTokenResponse
 import io.github.kostack.mcp_openai.dto.ToolDefinition
-import io.github.kostack.mcp_openai.utils.HttpRetryUtils
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.http.HttpHeaders
@@ -12,7 +10,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.client.MultipartBodyBuilder
 import org.springframework.web.reactive.function.client.WebClient
-import org.springframework.web.reactive.function.client.awaitBody
 import org.springframework.web.reactive.function.client.toEntity
 import org.springframework.web.util.UriComponentsBuilder
 import reactor.core.publisher.Mono
@@ -74,36 +71,5 @@ class OpenAiHttpService(
       .onStatus({ it == HttpStatus.NOT_FOUND }) { Mono.empty() }
       .toBodilessEntity()
       .awaitSingle()
-  }
-
-  // legacy
-  suspend fun createEphemeralToken(
-    instructions: String,
-    language: String,
-    definitions: List<ToolDefinition>
-  ): RealtimeTokenResponse {
-    val response =
-      HttpRetryUtils.retryHttpCall {
-        webClient
-          .post()
-          .uri(mcpProperties.clientSecretsUrl)
-          .header(HttpHeaders.AUTHORIZATION, "Bearer ${mcpProperties.apiKey}")
-          .contentType(MediaType.APPLICATION_JSON)
-          .bodyValue(
-            RealtimeUtils.createSession(
-              instructions = instructions,
-              language = language,
-              definitions = definitions,
-              properties = mcpProperties
-            )
-          ).retrieve()
-          .awaitBody<Map<String, Any>>()
-      }
-
-    val clientSecret =
-      ((response["value"] ?: response["client_secret"]) as? String)
-        ?: error("No client secret returned from OpenAI")
-
-    return RealtimeTokenResponse(clientSecret)
   }
 }

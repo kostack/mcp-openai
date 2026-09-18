@@ -14,7 +14,7 @@ class RealtimeTokenListener {
     Always reply in English. Context of the chat :history_items
     """.trimIndent()
 
-  @SuspendListener(RealtimeEvents.TOKEN_PRE_CREATE)
+  @SuspendListener(RealtimeEvents.PRE_CONNECT)
   suspend fun onTokenPreCreate(event: RealtimeTokenPreCreateEvent) {
     event.instructions = instructions
   }

@@ -12,6 +12,7 @@ import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.github.kostack.mcp_openai.utils.RealtimeUtils
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,32 +26,40 @@ class RealtimeEventHandler(
   private val objectMapper: ObjectMapper,
   private val toolDispatcher: ToolDispatcher,
   private val websocketSessionRegistry: WebSocketSessionRegistry,
-  private val suspendDispatcher: SuspendDispatcher
+  private val suspendDispatcher: SuspendDispatcher,
+  toolDispatcherContext: CoroutineDispatcher = Dispatchers.IO
 ) {
   private val supervisorJob = SupervisorJob()
-  private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
+  private val scope = CoroutineScope(supervisorJob + toolDispatcherContext)
   private val toolCallScopes = ConcurrentHashMap<String, CoroutineScope>()
 
   suspend fun handleInbound(
     event: RealtimeEvent,
     request: SidebandConnectRequest
   ) {
-    if (event.type != FUNCTION_CALL_ARGUMENTS_DONE) {
-      handle(event, request)
-      return
-    }
+    when (event.type) {
+      FUNCTION_CALL_ARGUMENTS_DONE -> {
+        toolCallScope(request.callId).launch {
+          try {
+            handleFunctionCall(event.name, event.callId, event.arguments, request)
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            log.error(
+              "Realtime tool call failed callId={}, toolCallId={}",
+              request.callId,
+              event.callId,
+              e
+            )
+          }
+        }
+      }
 
-    toolCallScope(request.callId).launch {
-      try {
-        handle(event, request)
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        log.error(
-          "Realtime tool call failed callId={}, toolCallId={}",
-          request.callId,
-          event.callId,
-          e
+      else -> {
+        logEvent(event)
+        suspendDispatcher.publishSequential(
+          RealtimeEvents.REALTIME_EVENT,
+          RealtimeHandlerEvent(event, request)
         )
       }
     }
@@ -66,79 +75,12 @@ class RealtimeEventHandler(
     toolCallScopes.clear()
   }
 
-  suspend fun handle(
-    event: RealtimeEvent,
-    request: SidebandConnectRequest
-  ) {
-    when (event.type) {
-      "session.updated" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.SESSION_UPDATED,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "response.created" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.RESPONSE_CREATED,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "response.done" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.RESPONSE_DONE,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "conversation.item.done" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.CONVERSATION_ITEM_DONE,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "conversation.item.input_audio_transcription.completed" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "response.output_item.done" -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      "response.function_call_arguments.done" -> {
-        handleFunctionCallArgumentsDone(event, request)
-      }
-
-      "error" -> {
-        log.warn("Realtime error: {}", event.error)
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.RESPONSE_ERROR,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
-
-      else -> {
-        suspendDispatcher.publishSequential(
-          RealtimeEvents.REALTIME_EVENT,
-          RealtimeHandlerEvent(event, request)
-        )
-      }
+  private fun logEvent(event: RealtimeEvent) {
+    if (event.type == "error") {
+      log.warn("Realtime event: {}", event)
+    } else {
+      log.debug("Realtime event: {}", event)
     }
-  }
-
-  private suspend fun handleFunctionCallArgumentsDone(
-    event: RealtimeEvent,
-    request: SidebandConnectRequest
-  ) {
-    handleFunctionCall(event.name, event.callId, event.arguments, request)
   }
 
   private suspend fun handleFunctionCall(
@@ -172,12 +114,11 @@ class RealtimeEventHandler(
     val toolResult = toolDispatcher.execute(toolName, context)
 
     log.info(
-      "Tool call result: name={}, callId={}, channel={}, sessionCallId={}, success={}",
+      "Tool call result: name={}, callId={}, channel={}, sessionCallId={}",
       toolName,
       toolCallId,
       request.channel,
-      request.callId,
-      toolResult.success
+      request.callId
     )
 
     val resultOutput =

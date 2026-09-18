@@ -4,7 +4,6 @@ import io.github.kostack.event_dispatcher.SuspendListener
 import io.github.kostack.mcp_openai.RealtimeEvents
 import io.github.kostack.mcp_openai.dto.RealtimeItem
 import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
-import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
 import io.github.kostack.mcp_openai.service.ConversationStore
 import kotlin.collections.firstOrNull
 import kotlin.collections.orEmpty
@@ -12,18 +11,10 @@ import kotlin.collections.orEmpty
 class ConversationListener(
   private val conversationStore: ConversationStore
 ) {
-  @SuspendListener(RealtimeEvents.TOKEN_PRE_CREATE, priority = -100)
-  suspend fun onTokenPreCreate(event: RealtimeTokenPreCreateEvent) {
-    val history = conversationStore.history(event.request.channel)
-    if (history.isNotEmpty()) {
-      event.instructions =
-        event.instructions.replace(":history_items", history.joinToString("\n"))
-    }
-  }
-
-  @SuspendListener(RealtimeEvents.CONVERSATION_ITEM_DONE)
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onConversationItemDone(event: RealtimeHandlerEvent) {
     val realtimeEvent = event.realtimeEvent
+    if (realtimeEvent.type != "conversation.item.done") return
     val item = realtimeEvent.item
     if (item?.type != "message" || item.role != "user") return
     val text = extractTextFromItem(item, input = true) ?: return
@@ -35,9 +26,10 @@ class ConversationListener(
     )
   }
 
-  @SuspendListener(RealtimeEvents.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED)
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onInputAudioTranscriptionCompleted(event: RealtimeHandlerEvent) {
     val realtimeEvent = event.realtimeEvent
+    if (realtimeEvent.type != "conversation.item.input_audio_transcription.completed") return
     val transcript = realtimeEvent.transcript?.takeIf { it.isNotBlank() } ?: return
 
     conversationStore.appendOnce(
@@ -47,9 +39,10 @@ class ConversationListener(
     )
   }
 
-  @SuspendListener(RealtimeEvents.RESPONSE_DONE)
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onResponseDone(event: RealtimeHandlerEvent) {
     val realtimeEvent = event.realtimeEvent
+    if (realtimeEvent.type != "response.done") return
     val output = realtimeEvent.response?.output.orEmpty()
 
     output
@@ -57,8 +50,9 @@ class ConversationListener(
       .forEach { appendAssistantItem(event, it) }
   }
 
-  @SuspendListener(RealtimeEvents.RESPONSE_OUTPUT_ITEM_DONE)
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onResponseOutputItemDone(event: RealtimeHandlerEvent) {
+    if (event.realtimeEvent.type != "response.output_item.done") return
     val item = event.realtimeEvent.item ?: return
     if (item.type != "message" || item.role != "assistant") return
 
@@ -93,9 +87,5 @@ class ConversationListener(
         .orEmpty()
         .firstOrNull { it.type in audioTypes }
         ?.transcript
-  }
-
-  companion object {
-    private val log = org.slf4j.LoggerFactory.getLogger(ConversationListener::class.java)
   }
 }

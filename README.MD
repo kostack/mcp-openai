@@ -85,7 +85,6 @@ Available properties:
 | Property | Default | Description |
 | --- | --- | --- |
 | `api-key` | empty | Your server-side OpenAI API key. Do not expose this to browsers. |
-| `client-secrets-url` | `https://api.openai.com/v1/realtime/client_secrets` | OpenAI endpoint used to create ephemeral Realtime client secrets. |
 | `calls-url` | `https://api.openai.com/v1/realtime/calls` | OpenAI unified call creation endpoint. |
 | `sideband-url` | `wss://api.openai.com/v1/realtime` | OpenAI sideband WebSocket endpoint. |
 | `sideband-prefix` | `/api/realtime` | Prefix for the built-in Realtime HTTP routes. |
@@ -98,7 +97,7 @@ Available properties:
 
 ### Namespace
 
-A namespace groups tools and routes. When a token is created for a namespace,
+A namespace groups tools and routes. When a call is created for a namespace,
 only tools from that namespace are sent to OpenAI. When a tool call comes back,
 the dispatcher executes a tool with a matching namespace and name.
 
@@ -181,7 +180,7 @@ class WeatherTool : AbstractTool() {
         temperatureCelsius = 27
       )
 
-    return ToolResult(success = true, result = result)
+    return ToolResult(result = result)
   }
 }
 ```
@@ -192,14 +191,13 @@ When OpenAI calls `get_weather`, the package decodes the JSON arguments into
 | Mode | Behavior |
 | --- | --- |
 | `REALTIME` (default) | Sends the result back to OpenAI and requests an assistant response using the session's current modality. |
-| `DIRECT` | Returns without sending the result to OpenAI or requesting an assistant response. Your tool/application handles client delivery, for example through SSE. |
+| `DIRECT` | Sends OpenAI a delivery acknowledgement containing the result, without requesting an assistant response. Your tool/application handles client delivery, for example through SSE. |
 
 For direct delivery, send the result through your application's SSE layer within
 your tool implementation, then return:
 
 ```kotlin
 return ToolResult(
-  success = true,
   result = result,
   mode = ToolResult.ToolResultMode.DIRECT
 )
@@ -214,19 +212,17 @@ explicitly when your tool handles and delivers an error itself.
 
 ## Backend Routes
 
-The package auto-configures a default `SidebandConfigurationRouter`. The
+The package auto-configures a default Realtime router. The
 default routes use `kostack-mcp.sideband-prefix`, which is `/api/realtime` by
 default:
 
 - `POST /api/realtime/calls` (recommended: creates the call and starts sideband attachment)
-- `POST /api/realtime/token` (legacy ephemeral flow)
-- `POST /api/realtime/connect`
 - `POST /api/realtime/disconnect`
 
 The request body carries `namespace`, `channel`, and language/audio settings.
 The handler uses `request.namespace` to select tool definitions. The default
-token instructions are intentionally restrictive; set application instructions
-in a `RealtimeEvents.TOKEN_PRE_CREATE` listener.
+call instructions are intentionally restrictive; set application instructions
+in a `RealtimeEvents.PRE_CONNECT` listener.
 
 ### Create A Call (Unified Interface)
 
@@ -245,64 +241,12 @@ Content-Type: application/json
 }
 ```
 
-The backend runs `TOKEN_PRE_CREATE` listeners for instructions and history,
+The backend runs `PRE_CONNECT` listeners for instructions and history,
 posts multipart `sdp` and `session` fields to OpenAI using `kostack-mcp.api-key`,
 and starts the sideband with that same API key. The response contains only
 `{"sdp": "...answer SDP...", "callId": "rtc_..."}`. Apply the answer with
 `pc.setRemoteDescription()`. No separate `/token` or `/connect` request is needed.
 Sideband attachment runs asynchronously; the HTTP response does not confirm its readiness.
-
-### Create A Token (Legacy Ephemeral Flow)
-
-Request:
-
-```http
-POST /api/realtime/token
-Content-Type: application/json
-
-{
-  "namespace": "support_assistant",
-  "channel": "conversation-123",
-  "language": "en",
-  "audioEnabled": false
-}
-```
-
-Response:
-
-```json
-{
-  "clientSecret": "ek_..."
-}
-```
-
-Use the returned `clientSecret` only in the browser session that requested it.
-
-### Connect The Sideband (Legacy Or Manual)
-
-After the browser creates the Realtime WebRTC call, send the OpenAI call id and
-the client secret to your backend. For calls created with the server API key,
-omit `clientSecret` to use the configured server key instead.
-
-```http
-POST /api/realtime/connect
-Content-Type: application/json
-
-{
-  "callId": "call_abc123",
-  "clientSecret": "ek_...",
-  "namespace": "support_assistant",
-  "channel": "conversation-123",
-  "language": "en",
-  "audioEnabled": false
-}
-```
-
-Successful response:
-
-```http
-204 No Content
-```
 
 ### Disconnect The Sideband
 
@@ -414,7 +358,7 @@ import org.springframework.stereotype.Component
 
 @Component
 class RealtimeListeners {
-  @SuspendListener(RealtimeEvents.TOKEN_PRE_CREATE)
+  @SuspendListener(RealtimeEvents.PRE_CONNECT)
   suspend fun onTokenPreCreate(event: RealtimeTokenPreCreateEvent) {
     event.instructions =
       """
@@ -435,8 +379,9 @@ class RealtimeListeners {
     println("Sideband session started for ${event.request.callId}")
   }
 
-  @SuspendListener(RealtimeEvents.RESPONSE_DONE)
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onResponseDone(event: RealtimeHandlerEvent) {
+    if (event.realtimeEvent.type != "response.done") return
     println("Response completed on ${event.request.channel}")
   }
 }
@@ -446,23 +391,19 @@ Published event names:
 
 | Event | When it is published |
 | --- | --- |
-| `kostack_mcp.token.pre_create` | Before a unified call or an ephemeral token is created. |
+| `kostack_mcp.pre_connect` | Before a call is created; listeners supply instructions. |
 | `kostack_mcp.connect` | Before the sideband connection is started. |
 | `kostack_mcp.disconnect` | Before a sideband connection is cancelled. |
 | `kostack_mcp.session.start` | After the sideband WebSocket session is available. |
-| `kostack_mcp.conversation.item.done` | When a completed conversation item is received. |
-| `kostack_mcp.conversation.item.input_audio_transcription.completed` | When input audio transcription completes. |
-| `kostack_mcp.response.output.item.done` | When a response output item completes. |
-| `kostack_mcp.response.done` | When a response completes. |
-| `kostack_mcp.response.error` | When OpenAI sends an error event. |
-| `kostack_mcp.session.updated` | When the Realtime session is updated. |
+| `kostack_mcp.realtime_event` | Inbound events other than function-call arguments completion; filter by `event.realtimeEvent.type`. |
 
 ## Conversation History
 
 `ConversationStore` stores conversation history by channel in memory. The
-included `ConversationListener` records user and assistant messages and replaces
-`:history_items` in `RealtimeTokenPreCreateEvent.instructions` when a token is
-created.
+included `ConversationListener` records user and assistant messages. To include
+history in a new call, read `ConversationStore.history(channel)` in a
+`PRE_CONNECT` listener and insert it into `RealtimeTokenPreCreateEvent.instructions`.
+Placeholder replacement is the responsibility of your listener.
 
 Example instruction:
 
@@ -474,15 +415,16 @@ Use this conversation history when answering:
 
 For production applications, treat this as an in-memory default. If you need
 durable history across restarts, persist your own history and update
-`RealtimeTokenPreCreateEvent.instructions` in a token pre-create listener.
+`RealtimeTokenPreCreateEvent.instructions` in a `PRE_CONNECT` listener.
 
 ## Audio
 
-Set `audioEnabled` to `true` in token and sideband requests only when your
+Set `audioEnabled` to `true` in call requests only when your
 application supports microphone access and audio output. If `enable-audio` is
 `false` in configuration, the handler forces request audio off.
 
-When audio is enabled, session creation includes:
+Session creation currently always includes the following audio configuration;
+`enable-audio` controls the requested modality for tool follow-up responses:
 
 - Server VAD turn detection.
 - Input transcription using `kostack-mcp.transcription-model`.
@@ -494,7 +436,7 @@ If tool execution throws an exception, `ToolDispatcher` returns:
 
 ```json
 {
-  "success": false,
+  "mode": "REALTIME",
   "result": "Error executing tool: tool_name, error: ..."
 }
 ```
@@ -503,7 +445,6 @@ For expected business failures, return a normal `ToolResult` instead:
 
 ```kotlin
 return ToolResult(
-  success = false,
   result = mapOf("message" to "No matching account was found")
 )
 ```
@@ -518,7 +459,7 @@ package com.example.demo.tools
 import io.github.kostack.mcp_openai.dto.ToolContext
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
 
 class WeatherToolTest {
   @Test
@@ -530,11 +471,12 @@ class WeatherToolTest {
         ToolContext(
           namespace = "support_assistant",
           channel = "test-channel",
+          sessionId = "test-session",
           rawRequest = """{"city":"Athens"}"""
         )
       )
 
-    assertTrue(result.success)
+    assertNotNull(result.result)
   }
 }
 ```
@@ -560,7 +502,7 @@ fun main(args: Array<String>) {
 
 @Component
 class DemoRealtimeListeners {
-  @SuspendListener(RealtimeEvents.TOKEN_PRE_CREATE)
+  @SuspendListener(RealtimeEvents.PRE_CONNECT)
   suspend fun onTokenPreCreate(event: RealtimeTokenPreCreateEvent) {
     event.instructions = "You are a helpful assistant. Reply in English."
   }
@@ -571,7 +513,7 @@ class DemoRealtimeListeners {
 
 - Keep `kostack-mcp.api-key` server-side.
 - The unified call flow returns only SDP and a call ID to the browser.
-- Protect your call, token, and sideband endpoints with your application auth.
+- Protect your call and disconnect endpoints with your application auth.
 - Validate that the current user is allowed to access the requested channel.
 - Do not trust tool arguments just because they came from the model; validate
   them in your tool implementation.

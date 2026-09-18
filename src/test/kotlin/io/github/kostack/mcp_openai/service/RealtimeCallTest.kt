@@ -56,7 +56,7 @@ class RealtimeCallTest {
       val dispatcher = mockk<SuspendDispatcher>(relaxed = true)
       val tools = mockk<ToolDispatcher>()
       every { tools.getDefinitions("crm") } returns emptyList()
-      coEvery { dispatcher.publishSequential(RealtimeEvents.TOKEN_PRE_CREATE, any()) } coAnswers {
+      coEvery { dispatcher.publishSequential(RealtimeEvents.PRE_CONNECT, any()) } coAnswers {
         secondArg<RealtimeTokenPreCreateEvent>().instructions = "Application instructions and history"
       }
       val handler =
@@ -111,7 +111,6 @@ class RealtimeCallTest {
       val connect = slot<SidebandConnectRequest>()
       verify(exactly = 1) { sideband.connect(capture(connect)) }
       assertEquals("rtc_test", connect.captured.callId)
-      assertEquals("", connect.captured.clientSecret)
       assertEquals("chat-1", connect.captured.channel)
       assertFalse(connect.captured.audioEnabled)
       val json = String(result.responseBody!!)

@@ -208,13 +208,51 @@ class ConversationListenerTest {
       )
     }
 
+  @Test
+  fun `shared topic listeners ignore unrelated event types even with matching payloads`() =
+    runTest {
+      val userItem =
+        RealtimeItem(
+          id = "user-1",
+          type = "message",
+          role = "user",
+          content = listOf(RealtimeContent(type = "input_text", text = "Ignored"))
+        )
+      val assistantItem =
+        RealtimeItem(
+          id = "assistant-1",
+          type = "message",
+          role = "assistant",
+          content = listOf(RealtimeContent(type = "output_text", text = "Ignored"))
+        )
+      listener.onConversationItemDone(event(RealtimeEvent(type = "custom.event", item = userItem)))
+      listener.onInputAudioTranscriptionCompleted(
+        event(RealtimeEvent(type = "custom.event", itemId = "audio-1", transcript = "Ignored"))
+      )
+      listener.onResponseOutputItemDone(event(RealtimeEvent(type = "custom.event", item = assistantItem)))
+      listener.onResponseDone(
+        event(
+          RealtimeEvent(
+            type = "custom.event",
+            response =
+              RealtimeResponse(
+                id = "response-1",
+                status = "completed",
+                output = listOf(assistantItem)
+              )
+          )
+        )
+      )
+
+      assertEquals(emptyList(), conversationStore.history("web"))
+    }
+
   private fun event(realtimeEvent: RealtimeEvent): RealtimeHandlerEvent =
     RealtimeHandlerEvent(
       realtimeEvent = realtimeEvent,
       request =
         SidebandConnectRequest(
           callId = "call-123",
-          clientSecret = "client-secret",
           namespace = "crm",
           channel = "web",
           language = "en"
