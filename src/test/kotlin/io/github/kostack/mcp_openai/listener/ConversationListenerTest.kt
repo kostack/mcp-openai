@@ -37,7 +37,7 @@ class ConversationListenerTest {
       listener.onConversationItemDone(event)
 
       assertEquals(
-        listOf(mapOf("role" to "user", "content" to "Hello")),
+        listOf(mapOf("id" to "item-1", "role" to "user", "content" to "Hello")),
         conversationStore.history("web")
       )
     }
@@ -79,7 +79,7 @@ class ConversationListenerTest {
       listener.onInputAudioTranscriptionCompleted(event)
 
       assertEquals(
-        listOf(mapOf("role" to "user", "content" to "Audio transcript")),
+        listOf(mapOf("id" to "audio-item-1", "role" to "user", "content" to "Audio transcript")),
         conversationStore.history("web")
       )
     }
@@ -132,7 +132,7 @@ class ConversationListenerTest {
       )
 
       assertEquals(
-        listOf(mapOf("role" to "assistant", "content" to "Answer")),
+        listOf(mapOf("id" to "assistant-item-1", "role" to "assistant", "content" to "Answer")),
         conversationStore.history("web")
       )
     }
@@ -169,7 +169,7 @@ class ConversationListenerTest {
       )
 
       assertEquals(
-        listOf(mapOf("role" to "assistant", "content" to "Spoken answer")),
+        listOf(mapOf("id" to "assistant-item-1", "role" to "assistant", "content" to "Spoken answer")),
         conversationStore.history("web")
       )
     }
@@ -203,7 +203,7 @@ class ConversationListenerTest {
       )
 
       assertEquals(
-        listOf(mapOf("role" to "assistant", "content" to "Answer")),
+        listOf(mapOf("id" to "assistant-item-1", "role" to "assistant", "content" to "Answer")),
         conversationStore.history("web")
       )
     }

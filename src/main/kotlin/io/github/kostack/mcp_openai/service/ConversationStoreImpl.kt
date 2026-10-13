@@ -25,7 +25,7 @@ class ConversationStoreImpl : ConversationStore {
 
     val seen = seenItems.getOrPut(sessionId) { ConcurrentHashMap.newKeySet() }
     if (seen.add(itemId)) {
-      append(sessionId, item)
+      append(sessionId, item + ("id" to itemId))
     }
   }
 

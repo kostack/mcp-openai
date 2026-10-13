@@ -544,12 +544,10 @@
 
     cancelAssistantResponse();
     addMessage("user", text);
-    const itemId = crypto.randomUUID().replaceAll("-", "");
 
     sendRealtimeEvent({
       type: "conversation.item.create",
       item: {
-        id: itemId,
         type: "message",
         role: "user",
         content: [
