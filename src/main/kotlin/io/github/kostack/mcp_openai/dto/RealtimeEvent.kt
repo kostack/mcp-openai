@@ -28,7 +28,8 @@ data class RealtimeItem(
   val name: String? = null,
   val arguments: String? = null,
   @JsonProperty("call_id")
-  val callId: String? = null
+  val callId: String? = null,
+  val output: String? = null
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

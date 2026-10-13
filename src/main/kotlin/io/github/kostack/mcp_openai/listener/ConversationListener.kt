@@ -12,6 +12,27 @@ class ConversationListener(
   private val conversationStore: ConversationStore
 ) {
   @SuspendListener(RealtimeEvents.REALTIME_EVENT)
+  suspend fun onFunctionOutputDone(event: RealtimeHandlerEvent) {
+    if (event.realtimeEvent.type != "conversation.item.done") return
+    val item = event.realtimeEvent.item ?: return
+    if (item.type != "function_call_output") return
+    val itemId = item.id ?: return
+    val callId = item.callId ?: return
+    val output = item.output ?: return
+
+    conversationStore.appendOnce(
+      sessionId = event.request.channel,
+      itemId = itemId,
+      item =
+        mapOf(
+          "type" to "function_call_output",
+          "call_id" to callId,
+          "output" to output
+        )
+    )
+  }
+
+  @SuspendListener(RealtimeEvents.REALTIME_EVENT)
   suspend fun onConversationItemDone(event: RealtimeHandlerEvent) {
     val realtimeEvent = event.realtimeEvent
     if (realtimeEvent.type != "conversation.item.done") return

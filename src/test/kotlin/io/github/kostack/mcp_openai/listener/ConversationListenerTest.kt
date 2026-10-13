@@ -9,12 +9,94 @@ import io.github.kostack.mcp_openai.event.RealtimeHandlerEvent
 import io.github.kostack.mcp_openai.service.ConversationStore
 import io.github.kostack.mcp_openai.service.ConversationStoreImpl
 import kotlinx.coroutines.test.runTest
+import tools.jackson.databind.json.JsonMapper
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ConversationListenerTest {
   private val conversationStore: ConversationStore = ConversationStoreImpl()
   private val listener = ConversationListener(conversationStore)
+
+  @Test
+  fun `confirmed function output saves server item id and output once`() =
+    runTest {
+      val realtimeEvent =
+        JsonMapper.builder().build().readValue(
+          """
+          {
+            "type": "conversation.item.done",
+            "item": {
+              "id": "output-item-1",
+              "type": "function_call_output",
+              "call_id": "tool-call-1",
+              "output": "{\"status\":\"ok\"}"
+            }
+          }
+          """.trimIndent(),
+          RealtimeEvent::class.java
+        )
+      val event = event(realtimeEvent)
+
+      listener.onFunctionOutputDone(event)
+      listener.onFunctionOutputDone(event)
+
+      assertEquals(
+        listOf(
+          mapOf(
+            "id" to "output-item-1",
+            "type" to "function_call_output",
+            "call_id" to "tool-call-1",
+            "output" to "{\"status\":\"ok\"}"
+          )
+        ),
+        conversationStore.history("web")
+      )
+    }
+
+  @Test
+  fun `function output listener ignores unconfirmed unrelated and incomplete items`() =
+    runTest {
+      val item =
+        RealtimeItem(
+          id = "output-item-1",
+          type = "function_call_output",
+          callId = "tool-call-1",
+          output = "result"
+        )
+      listener.onFunctionOutputDone(event(RealtimeEvent(type = "conversation.item.added", item = item)))
+      listOf(
+        null,
+        item.copy(type = "message"),
+        item.copy(id = null),
+        item.copy(callId = null),
+        item.copy(output = null)
+      ).forEach {
+        listener.onFunctionOutputDone(event(RealtimeEvent(type = "conversation.item.done", item = it)))
+      }
+
+      assertEquals(emptyList(), conversationStore.history("web"))
+    }
+
+  @Test
+  fun `function output listener preserves empty output`() =
+    runTest {
+      listener.onFunctionOutputDone(
+        event(
+          RealtimeEvent(
+            type = "conversation.item.done",
+            item =
+              RealtimeItem(
+                id = "output-item-1",
+                type = "function_call_output",
+                callId = "tool-call-1",
+                output = ""
+              )
+          )
+        )
+      )
+
+      assertEquals("", conversationStore.history("web").single()["output"])
+    }
 
   @Test
   fun `conversation item done appends user text once`() =
