@@ -2,7 +2,7 @@ package io.github.kostack.mcp_openai.listener
 
 import io.github.kostack.event_dispatcher.SuspendListener
 import io.github.kostack.mcp_openai.RealtimeEvents
-import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
+import io.github.kostack.mcp_openai.event.RealtimePreConnectEvent
 import org.springframework.stereotype.Component
 
 @Component
@@ -15,7 +15,7 @@ class RealtimeTokenListener {
     """.trimIndent()
 
   @SuspendListener(RealtimeEvents.PRE_CONNECT)
-  suspend fun onTokenPreCreate(event: RealtimeTokenPreCreateEvent) {
+  suspend fun onTokenPreCreate(event: RealtimePreConnectEvent) {
     event.instructions = instructions
   }
 }

@@ -6,7 +6,7 @@ import io.github.kostack.mcp_openai.RealtimeSidebandHandler
 import io.github.kostack.mcp_openai.autoconfiguration.McpOpenAiAutoConfiguration
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
-import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
+import io.github.kostack.mcp_openai.event.RealtimePreConnectEvent
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.mockk.coEvery
 import io.mockk.every
@@ -57,7 +57,7 @@ class RealtimeCallTest {
       val tools = mockk<ToolDispatcher>()
       every { tools.getDefinitions("crm") } returns emptyList()
       coEvery { dispatcher.publishSequential(RealtimeEvents.PRE_CONNECT, any()) } coAnswers {
-        secondArg<RealtimeTokenPreCreateEvent>().instructions = "Application instructions and history"
+        secondArg<RealtimePreConnectEvent>().instructions = "Application instructions and history"
       }
       val handler =
         RealtimeSidebandHandler(

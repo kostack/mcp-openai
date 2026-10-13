@@ -9,7 +9,7 @@ import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.event.RealtimeConnectEvent
 import io.github.kostack.mcp_openai.event.RealtimeDisconnectEvent
-import io.github.kostack.mcp_openai.event.RealtimeTokenPreCreateEvent
+import io.github.kostack.mcp_openai.event.RealtimePreConnectEvent
 import io.github.kostack.mcp_openai.service.OpenAiHttpService
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
@@ -44,7 +44,7 @@ class RealtimeSidebandHandlerTest {
       val connection = slot<SidebandConnectRequest>()
       val connectEvent = slot<RealtimeConnectEvent>()
       coEvery { events.publishSequential(RealtimeEvents.PRE_CONNECT, any()) } coAnswers {
-        val event = secondArg<RealtimeTokenPreCreateEvent>()
+        val event = secondArg<RealtimePreConnectEvent>()
         assertEquals("crm", event.request.namespace)
         assertEquals("chat-1", event.request.channel)
         assertEquals("en", event.request.language)
@@ -79,7 +79,7 @@ class RealtimeSidebandHandlerTest {
         for (requestedAudio in listOf(false, true)) {
           for (listenerAudio in listOf(false, true)) {
             coEvery { events.publishSequential(RealtimeEvents.PRE_CONNECT, any()) } coAnswers {
-              val settings = secondArg<RealtimeTokenPreCreateEvent>().request
+              val settings = secondArg<RealtimePreConnectEvent>().request
               assertEquals(globalAudio && requestedAudio, settings.audioEnabled)
               settings.audioEnabled = listenerAudio
             }
