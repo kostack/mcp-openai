@@ -7,7 +7,6 @@ import io.github.kostack.mcp_openai.dto.RealtimeEvent
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.event.RealtimeConnectEvent
-import io.github.kostack.mcp_openai.registry.SidebandHeartbeatRegistry
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
 import jakarta.annotation.PreDestroy
@@ -48,7 +47,6 @@ class RealtimeSidebandService(
   private val realtimeEventHandler: RealtimeEventHandler,
   private val suspendDispatcher: SuspendDispatcher,
   private val client: WebSocketClient,
-  private val heartbeatRegistry: SidebandHeartbeatRegistry,
   private val openAiHttpService: OpenAiHttpService
 ) {
   private val supervisorJob = SupervisorJob()
@@ -117,18 +115,13 @@ class RealtimeSidebandService(
                     }.then()
                   }
 
-                  WebSocketMessage.Type.PONG -> {
-                    heartbeatRegistry.pong(callId)
-                    Mono.empty()
-                  }
-
                   else -> {
                     Mono.empty()
                   }
                 }
               }.doOnError { e ->
                 if (e is CancellationException) {
-                  log.info("Sideband receive cancelled callId={}", callId)
+                  log.warn("Sideband receive cancelled callId={}", callId)
                 } else {
                   log.error("Sideband error callId={}", callId, e)
                 }

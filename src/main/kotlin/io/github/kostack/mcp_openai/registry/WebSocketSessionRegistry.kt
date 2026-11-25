@@ -25,17 +25,6 @@ class WebSocketSessionRegistry(
 
   fun get(callId: String): WebSocketSession? = sessions[callId]?.session
 
-  fun isOpen(callId: String): Boolean {
-    val session = get(callId) ?: return false
-
-    if (!session.isOpen) {
-      remove(callId, session)
-      return false
-    }
-
-    return true
-  }
-
   fun remove(
     callId: String,
     session: WebSocketSession
@@ -71,42 +60,6 @@ class WebSocketSessionRegistry(
     } catch (e: Exception) {
       remove(callId, session)
       log.debug("Websocket JSON enqueue failed callId={}, error={}", callId, e.message)
-      false
-    }
-  }
-
-  fun sendPing(callId: String): Boolean {
-    val connection = sessions[callId] ?: return false
-    val session = connection.session
-
-    if (!session.isOpen) {
-      remove(callId, session)
-      return false
-    }
-
-    return try {
-      val ping =
-        session.pingMessage { bufferFactory ->
-          bufferFactory.wrap(
-            callId.toByteArray()
-          )
-        }
-
-      val emitted = connection.emit(ping)
-      if (!emitted) {
-        remove(callId, session)
-        log.debug("Websocket ping enqueue failed callId={}", callId)
-      }
-      emitted
-    } catch (e: Exception) {
-      remove(callId, session)
-
-      log.debug(
-        "Websocket ping failed callId={}, error={}",
-        callId,
-        e.message
-      )
-
       false
     }
   }

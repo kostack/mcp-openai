@@ -32,18 +32,20 @@ class WebSocketSessionRegistryTest {
     }
 
   @Test
-  fun `json and ping share one ordered outbound stream`() =
+  fun `json messages share one ordered outbound stream`() =
     runTest {
       val registry = WebSocketSessionRegistry(objectMapper)
       val session = mockk<WebSocketSession>()
       val jsonMessage = mockk<WebSocketMessage>()
-      val pingMessage = mockk<WebSocketMessage>()
+      val secondJsonMessage = mockk<WebSocketMessage>()
       val payload = mapOf("type" to "response.create")
+      val secondPayload = mapOf("type" to "response.cancel")
 
       every { session.isOpen } returns true
       every { objectMapper.writeValueAsString(payload) } returns """{"type":"response.create"}"""
       every { session.textMessage("""{"type":"response.create"}""") } returns jsonMessage
-      every { session.pingMessage(any()) } returns pingMessage
+      every { objectMapper.writeValueAsString(secondPayload) } returns """{"type":"response.cancel"}"""
+      every { session.textMessage("""{"type":"response.cancel"}""") } returns secondJsonMessage
 
       val messages =
         registry
@@ -53,9 +55,9 @@ class WebSocketSessionRegistryTest {
           .toFuture()
 
       assertTrue(registry.sendJson("call-123", payload))
-      assertTrue(registry.sendPing("call-123"))
+      assertTrue(registry.sendJson("call-123", secondPayload))
 
-      kotlin.test.assertEquals(listOf(jsonMessage, pingMessage), messages.get())
+      kotlin.test.assertEquals(listOf(jsonMessage, secondJsonMessage), messages.get())
       verify(exactly = 0) { session.send(any()) }
     }
 }
