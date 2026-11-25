@@ -28,7 +28,7 @@ class OpenAiHttpServiceTest {
             Mono.just(ClientResponse.create(HttpStatus.OK).build())
           }.build()
       val service =
-        OpenAiHttpService(
+        OpenAiHttpServiceImpl(
           client,
           McpProperties(apiKey = "server-key", callsUrl = "https://example.test/v1/realtime/calls/")
         )
@@ -48,7 +48,7 @@ class OpenAiHttpServiceTest {
             Mono.just(ClientResponse.create(HttpStatus.NOT_FOUND).body("Call not found").build())
           }.build()
 
-      val service = OpenAiHttpService(client, McpProperties(apiKey = "server-key"))
+      val service = OpenAiHttpServiceImpl(client, McpProperties(apiKey = "server-key"))
       service.disconnect("rtc_missing")
       service.disconnect("rtc_missing")
     }
@@ -71,7 +71,7 @@ class OpenAiHttpServiceTest {
 
         val failure =
           assertFailsWith<WebClientResponseException> {
-            OpenAiHttpService(client, McpProperties(apiKey = "server-key")).disconnect("rtc_test")
+            OpenAiHttpServiceImpl(client, McpProperties(apiKey = "server-key")).disconnect("rtc_test")
           }
         assertEquals(status, failure.statusCode)
       }

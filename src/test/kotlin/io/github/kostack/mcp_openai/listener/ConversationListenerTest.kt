@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 
 class ConversationListenerTest {
   private val conversationStore: ConversationStore = ConversationStoreImpl()
-  private val listener = ConversationListener(conversationStore)
+  private val listener = ConversationListenerImpl(conversationStore)
 
   @Test
   fun `confirmed function output saves server item id and output once`() =

@@ -1,28 +1,21 @@
 package io.github.kostack.mcp_openai.registry
 
 import kotlinx.coroutines.Job
-import java.util.concurrent.ConcurrentHashMap
 
-class SidebandSessionRegistry {
-  private val sessions = ConcurrentHashMap<String, Job>()
-
+interface SidebandSessionRegistry {
   fun putIfAbsent(
     callId: String,
     job: Job
-  ): Job? = sessions.putIfAbsent(callId, job)
+  ): Job?
 
-  fun cancel(callId: String) {
-    sessions.remove(callId)?.cancel()
-  }
+  fun cancel(callId: String)
 
   fun remove(
     callId: String,
     job: Job
-  ) {
-    sessions.remove(callId, job)
-  }
+  )
 
-  fun contains(callId: String): Boolean = sessions.containsKey(callId)
+  fun contains(callId: String): Boolean
 
-  fun get(callId: String): Job? = sessions[callId]
+  fun get(callId: String): Job?
 }

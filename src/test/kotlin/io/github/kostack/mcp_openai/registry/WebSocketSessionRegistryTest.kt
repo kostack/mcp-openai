@@ -19,7 +19,7 @@ class WebSocketSessionRegistryTest {
   @Test
   fun `sendJson skips and removes closed session before serializing message`() =
     runTest {
-      val registry = WebSocketSessionRegistry(objectMapper)
+      val registry = WebSocketSessionRegistryImpl(objectMapper)
       val session = mockk<WebSocketSession>()
       val payload = mapOf("type" to "response.create")
 
@@ -36,7 +36,7 @@ class WebSocketSessionRegistryTest {
   @Test
   fun `json messages share one ordered outbound stream`() =
     runTest {
-      val registry = WebSocketSessionRegistry(objectMapper)
+      val registry = WebSocketSessionRegistryImpl(objectMapper)
       val session = mockk<WebSocketSession>()
       val jsonMessage = mockk<WebSocketMessage>()
       val secondJsonMessage = mockk<WebSocketMessage>()
@@ -65,7 +65,7 @@ class WebSocketSessionRegistryTest {
 
   @Test
   fun `full outbound buffer rejects further messages and fails the connection`() {
-    val registry = WebSocketSessionRegistry(ObjectMapper(), outboundBufferCapacity = 1)
+    val registry = WebSocketSessionRegistryImpl(ObjectMapper(), outboundBufferCapacity = 1)
     val session = mockk<WebSocketSession>()
     every { session.isOpen } returns true
     every { session.textMessage(any()) } answers {

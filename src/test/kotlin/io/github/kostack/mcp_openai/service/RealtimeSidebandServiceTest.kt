@@ -332,8 +332,8 @@ class RealtimeSidebandServiceTest {
     } returns Mono.error(error)
   }
 
-  private fun service(): RealtimeSidebandService =
-    RealtimeSidebandService(
+  private fun service(): RealtimeSidebandServiceImpl =
+    RealtimeSidebandServiceImpl(
       mcpProperties = properties,
       objectMapper = objectMapper,
       sidebandRegistry = sidebandRegistry,

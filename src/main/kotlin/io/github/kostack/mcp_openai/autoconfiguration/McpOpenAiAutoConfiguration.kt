@@ -2,20 +2,29 @@ package io.github.kostack.mcp_openai.autoconfiguration
 
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeSidebandHandler
+import io.github.kostack.mcp_openai.RealtimeSidebandHandlerImpl
+import io.github.kostack.mcp_openai.RealtimeSidebandRoutes
+import io.github.kostack.mcp_openai.RealtimeSidebandRoutesImpl
 import io.github.kostack.mcp_openai.dto.RealtimeCallRequest
 import io.github.kostack.mcp_openai.dto.SidebandDisconnectRequest
 import io.github.kostack.mcp_openai.listener.ConversationListener
+import io.github.kostack.mcp_openai.listener.ConversationListenerImpl
 import io.github.kostack.mcp_openai.registry.SidebandSessionRegistry
+import io.github.kostack.mcp_openai.registry.SidebandSessionRegistryImpl
 import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistry
+import io.github.kostack.mcp_openai.registry.WebSocketSessionRegistryImpl
 import io.github.kostack.mcp_openai.service.ConversationStore
 import io.github.kostack.mcp_openai.service.ConversationStoreImpl
 import io.github.kostack.mcp_openai.service.OpenAiHttpService
+import io.github.kostack.mcp_openai.service.OpenAiHttpServiceImpl
 import io.github.kostack.mcp_openai.service.RealtimeEventHandler
+import io.github.kostack.mcp_openai.service.RealtimeEventHandlerImpl
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
+import io.github.kostack.mcp_openai.service.RealtimeSidebandServiceImpl
 import io.github.kostack.mcp_openai.tool.Tool
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
+import io.github.kostack.mcp_openai.tool.ToolDispatcherImpl
 import org.springframework.beans.factory.ObjectProvider
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfigureBefore
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -43,7 +52,7 @@ class McpOpenAiAutoConfiguration {
     builder.ifAvailable?.build() ?: WebClient.create()
 
   @Bean
-  @ConditionalOnMissingBean(name = ["realtimeSidebandWebSocketClient"])
+  @ConditionalOnMissingBean(WebSocketClient::class)
   fun realtimeSidebandWebSocketClient(mcpProperties: McpProperties): WebSocketClient =
     ReactorNettyWebSocketClient(
       HttpClient.create()
@@ -54,33 +63,33 @@ class McpOpenAiAutoConfiguration {
     }
 
   @Bean
-  @ConditionalOnMissingBean(name = ["sidebandSessionRegistry"])
-  fun sidebandSessionRegistry(): SidebandSessionRegistry = SidebandSessionRegistry()
+  @ConditionalOnMissingBean
+  fun sidebandSessionRegistry(): SidebandSessionRegistry = SidebandSessionRegistryImpl()
 
   @Bean
-  @ConditionalOnMissingBean(name = ["webSocketSessionRegistry"])
+  @ConditionalOnMissingBean
   fun webSocketSessionRegistry(
     objectMapper: ObjectMapper,
     properties: McpProperties
-  ): WebSocketSessionRegistry = WebSocketSessionRegistry(objectMapper, properties.outboundBufferCapacity)
+  ): WebSocketSessionRegistry = WebSocketSessionRegistryImpl(objectMapper, properties.outboundBufferCapacity)
 
   @Bean
-  @ConditionalOnMissingBean(ConversationStore::class)
+  @ConditionalOnMissingBean
   fun conversationStore(): ConversationStore = ConversationStoreImpl()
 
   @Bean
-  @ConditionalOnMissingBean(name = ["toolDispatcher"])
-  fun toolDispatcher(tools: List<Tool>): ToolDispatcher = ToolDispatcher(tools)
+  @ConditionalOnMissingBean
+  fun toolDispatcher(tools: List<Tool>): ToolDispatcher = ToolDispatcherImpl(tools)
 
   @Bean
-  @ConditionalOnMissingBean(name = ["openAiHttpService"])
+  @ConditionalOnMissingBean
   fun openAiHttpService(
     webClient: WebClient,
     mcpProperties: McpProperties
-  ): OpenAiHttpService = OpenAiHttpService(webClient, mcpProperties)
+  ): OpenAiHttpService = OpenAiHttpServiceImpl(webClient, mcpProperties)
 
   @Bean
-  @ConditionalOnMissingBean(name = ["realtimeEventHandler"])
+  @ConditionalOnMissingBean
   fun realtimeEventHandler(
     objectMapper: ObjectMapper,
     toolDispatcher: ToolDispatcher,
@@ -88,7 +97,7 @@ class McpOpenAiAutoConfiguration {
     suspendDispatcher: SuspendDispatcher,
     properties: McpProperties
   ): RealtimeEventHandler =
-    RealtimeEventHandler(
+    RealtimeEventHandlerImpl(
       objectMapper,
       toolDispatcher,
       webSocketSessionRegistry,
@@ -98,7 +107,7 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
-  @ConditionalOnMissingBean(name = ["realtimeSidebandService"])
+  @ConditionalOnMissingBean
   fun realtimeSidebandService(
     mcpProperties: McpProperties,
     objectMapper: ObjectMapper,
@@ -107,9 +116,9 @@ class McpOpenAiAutoConfiguration {
     realtimeEventHandler: RealtimeEventHandler,
     suspendDispatcher: SuspendDispatcher,
     openAiHttpService: OpenAiHttpService,
-    @Qualifier("realtimeSidebandWebSocketClient") sidebandWebSocketClient: WebSocketClient
+    sidebandWebSocketClient: WebSocketClient
   ): RealtimeSidebandService =
-    RealtimeSidebandService(
+    RealtimeSidebandServiceImpl(
       mcpProperties,
       objectMapper,
       sidebandRegistry,
@@ -121,7 +130,7 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
-  @ConditionalOnMissingBean(name = ["realtimeSidebandHandler"])
+  @ConditionalOnMissingBean
   fun realtimeSidebandHandler(
     sidebandService: RealtimeSidebandService,
     openAiHttpService: OpenAiHttpService,
@@ -129,7 +138,7 @@ class McpOpenAiAutoConfiguration {
     toolDispatcher: ToolDispatcher,
     properties: McpProperties
   ): RealtimeSidebandHandler =
-    RealtimeSidebandHandler(
+    RealtimeSidebandHandlerImpl(
       sidebandService,
       openAiHttpService,
       suspendDispatcher,
@@ -138,22 +147,25 @@ class McpOpenAiAutoConfiguration {
     )
 
   @Bean
-  @ConditionalOnMissingBean(name = ["conversationListener"])
+  @ConditionalOnMissingBean
   fun conversationListener(conversationStore: ConversationStore): ConversationListener =
-    ConversationListener(conversationStore)
+    ConversationListenerImpl(conversationStore)
 
   @Bean
-  @ConditionalOnMissingBean(name = ["realtimeSidebandRoutes"])
+  @ConditionalOnMissingBean(RealtimeSidebandRoutes::class)
   fun realtimeSidebandRoutes(
     handler: RealtimeSidebandHandler,
     properties: McpProperties
-  ) = coRouter {
-    POST("${properties.sidebandPrefix}/calls") { request ->
-      handler.createCall(request.awaitBody<RealtimeCallRequest>())
-    }
+  ): RealtimeSidebandRoutes =
+    RealtimeSidebandRoutesImpl(
+      coRouter {
+        POST("${properties.sidebandPrefix}/calls") { request ->
+          handler.createCall(request.awaitBody<RealtimeCallRequest>())
+        }
 
-    POST("${properties.sidebandPrefix}/disconnect") { request ->
-      handler.disconnect(request.awaitBody<SidebandDisconnectRequest>())
-    }
-  }
+        POST("${properties.sidebandPrefix}/disconnect") { request ->
+          handler.disconnect(request.awaitBody<SidebandDisconnectRequest>())
+        }
+      }
+    )
 }

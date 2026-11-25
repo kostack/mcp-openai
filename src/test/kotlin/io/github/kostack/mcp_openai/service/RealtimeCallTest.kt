@@ -3,6 +3,7 @@ package io.github.kostack.mcp_openai.service
 import io.github.kostack.event_dispatcher.SuspendDispatcher
 import io.github.kostack.mcp_openai.RealtimeEvents
 import io.github.kostack.mcp_openai.RealtimeSidebandHandler
+import io.github.kostack.mcp_openai.RealtimeSidebandHandlerImpl
 import io.github.kostack.mcp_openai.autoconfiguration.McpOpenAiAutoConfiguration
 import io.github.kostack.mcp_openai.autoconfiguration.McpProperties
 import io.github.kostack.mcp_openai.dto.SidebandConnectRequest
@@ -60,9 +61,9 @@ class RealtimeCallTest {
         secondArg<RealtimePreConnectEvent>().instructions = "Application instructions and history"
       }
       val handler =
-        RealtimeSidebandHandler(
+        RealtimeSidebandHandlerImpl(
           sideband,
-          OpenAiHttpService(WebClient.create(), properties),
+          OpenAiHttpServiceImpl(WebClient.create(), properties),
           dispatcher,
           tools,
           properties

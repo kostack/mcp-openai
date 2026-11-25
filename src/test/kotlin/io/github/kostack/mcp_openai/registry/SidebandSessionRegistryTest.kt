@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class SidebandSessionRegistryTest {
   @Test
   fun `remove with job only removes matching registered job`() {
-    val registry = SidebandSessionRegistry()
+    val registry = SidebandSessionRegistryImpl()
     val activeJob = Job()
     val staleJob = Job()
 

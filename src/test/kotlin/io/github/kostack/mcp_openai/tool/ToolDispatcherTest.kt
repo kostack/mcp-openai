@@ -31,7 +31,7 @@ class ToolDispatcherTest {
       val matchingTool = tool("crm", "create_contact")
       val otherNamespaceTool = tool("support", "create_contact")
       val otherNameTool = tool("crm", "delete_contact")
-      val dispatcher = ToolDispatcher(listOf(otherNamespaceTool, otherNameTool, matchingTool))
+      val dispatcher = ToolDispatcherImpl(listOf(otherNamespaceTool, otherNameTool, matchingTool))
 
       coEvery { matchingTool.execute(context) } returns expectedResult
 
@@ -54,7 +54,7 @@ class ToolDispatcherTest {
           toolCallId = "tool-call-1",
           rawRequest = """{"id":1}"""
         )
-      val dispatcher = ToolDispatcher(listOf(tool("support", "create_contact")))
+      val dispatcher = ToolDispatcherImpl(listOf(tool("support", "create_contact")))
 
       val result = dispatcher.execute("create_contact", context)
 
@@ -74,7 +74,7 @@ class ToolDispatcherTest {
           rawRequest = """{"id":1}"""
         )
       val matchingTool = tool("crm", "create_contact")
-      val dispatcher = ToolDispatcher(listOf(matchingTool))
+      val dispatcher = ToolDispatcherImpl(listOf(matchingTool))
 
       coEvery { matchingTool.execute(context) } throws IllegalStateException("backend unavailable")
 
@@ -92,7 +92,7 @@ class ToolDispatcherTest {
     runTest {
       val context = ToolContext(namespace = "crm", channel = "sideband", sessionId = "session-1", "tool-call-1")
       val matchingTool = tool("crm", "create_contact")
-      val dispatcher = ToolDispatcher(listOf(matchingTool))
+      val dispatcher = ToolDispatcherImpl(listOf(matchingTool))
       val cancellation = CancellationException("client disconnected")
 
       coEvery { matchingTool.execute(context) } throws cancellation
@@ -113,7 +113,7 @@ class ToolDispatcherTest {
     val firstCrmTool = tool(firstCrmDefinition)
     val secondCrmTool = tool(secondCrmDefinition)
     val supportTool = tool(supportDefinition)
-    val dispatcher = ToolDispatcher(listOf(firstCrmTool, supportTool, secondCrmTool))
+    val dispatcher = ToolDispatcherImpl(listOf(firstCrmTool, supportTool, secondCrmTool))
 
     val definitions = dispatcher.getDefinitions("crm")
 

@@ -37,7 +37,7 @@ import kotlin.test.assertSame
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealtimeEventHandlerTest {
-  private val handlers = mutableListOf<RealtimeEventHandler>()
+  private val handlers = mutableListOf<RealtimeEventHandlerImpl>()
 
   @AfterTest
   fun tearDown() {
@@ -505,8 +505,8 @@ class RealtimeEventHandlerTest {
   private fun TestScope.handler(
     maxConcurrentCalls: Int = 16,
     toolTimeoutMillis: Long = 30_000
-  ): RealtimeEventHandler =
-    RealtimeEventHandler(
+  ): RealtimeEventHandlerImpl =
+    RealtimeEventHandlerImpl(
       objectMapper = objectMapper,
       toolDispatcher = toolDispatcher,
       websocketSessionRegistry = websocketSessionRegistry,

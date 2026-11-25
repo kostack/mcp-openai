@@ -211,5 +211,5 @@ class RealtimeSidebandHandlerTest {
     }
 
   private fun handler(properties: McpProperties = McpProperties()) =
-    RealtimeSidebandHandler(sideband, http, events, tools, properties)
+    RealtimeSidebandHandlerImpl(sideband, http, events, tools, properties)
 }
