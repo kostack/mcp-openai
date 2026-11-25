@@ -27,6 +27,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
+import org.springframework.context.event.ContextClosedEvent
+import org.springframework.context.event.EventListener
 import org.springframework.http.HttpHeaders
 import org.springframework.web.reactive.socket.WebSocketMessage
 import org.springframework.web.reactive.socket.WebSocketSession
@@ -174,6 +176,7 @@ class RealtimeSidebandServiceImpl(
   }
 
   @PreDestroy
+  @EventListener(ContextClosedEvent::class)
   fun destroy() {
     runBlocking {
       supervisorJob.cancelAndJoin()

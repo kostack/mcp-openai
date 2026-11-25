@@ -13,7 +13,7 @@ val springBootVersion = "4.1.2"
 val packageId = "mcp-openai"
 val packageName = "MCP OpenAI"
 group = "io.github.kostack"
-version = providers.gradleProperty("projectVersion").getOrElse("1.3.0")
+version = providers.gradleProperty("projectVersion").getOrElse("1.3.1")
 description = packageName
 
 java {
@@ -156,7 +156,15 @@ spotless {
 
 mavenPublishing {
   publishToMavenCentral()
-  signAllPublications()
+  val publishTasks =
+    gradle.startParameter.taskNames
+      .map {
+        it.substringAfterLast(':')
+      }.filter { it.startsWith("publish") }
+  val localPublishOnly = publishTasks.isNotEmpty() && publishTasks.all { it.endsWith("ToMavenLocal") }
+  if (!localPublishOnly) {
+    signAllPublications()
+  }
 
   coordinates(
     groupId = group.toString(),

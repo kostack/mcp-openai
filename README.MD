@@ -639,6 +639,15 @@ class DemoRealtimeListeners {
 
 ## Development And Fixture Application
 
+Publish to your local Maven repository without signing credentials:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+This installs `io.github.kostack:mcp-openai:1.3.0` in `~/.m2/repository`.
+Maven Central publishing still requires signing credentials.
+
 Run backend tests, formatting checks, and coverage verification:
 
 ```bash

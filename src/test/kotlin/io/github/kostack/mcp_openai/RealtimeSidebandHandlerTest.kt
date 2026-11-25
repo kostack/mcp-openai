@@ -23,6 +23,8 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.springframework.test.web.reactive.server.WebTestClient
 import kotlin.test.Test
@@ -140,6 +142,59 @@ class RealtimeSidebandHandlerTest {
         events.publishSequential(RealtimeEvents.DISCONNECT, any())
         sideband.disconnect(request)
       }
+    }
+
+  @Test
+  @OptIn(ExperimentalCoroutinesApi::class)
+  fun `disconnect hangup timeout cancels hangup and returns no content`() =
+    runTest {
+      val request = SidebandDisconnectRequest("call-1", "crm", "chat-1")
+      var hangupCancelled = false
+      coEvery { events.publishSequential(RealtimeEvents.DISCONNECT, any()) } just Runs
+      coEvery { sideband.disconnect(request) } coAnswers {
+        try {
+          delay(10_000)
+        } finally {
+          hangupCancelled = true
+        }
+      }
+      val startedAt = testScheduler.currentTime
+
+      val response = handler().disconnect(request)
+
+      assertEquals(204, response.statusCode().value())
+      assertEquals(5_000L, testScheduler.currentTime - startedAt)
+      assertEquals(true, hangupCancelled)
+      coVerify(exactly = 1) { sideband.disconnect(request) }
+    }
+
+  @Test
+  fun `disconnect listener is not subject to hangup timeout`() =
+    runTest {
+      val request = SidebandDisconnectRequest("call-1", "crm", "chat-1")
+      coEvery { events.publishSequential(RealtimeEvents.DISCONNECT, any()) } coAnswers { delay(6_000) }
+      coEvery { sideband.disconnect(request) } just Runs
+
+      val response = handler().disconnect(request)
+
+      assertEquals(204, response.statusCode().value())
+      coVerifyOrder {
+        events.publishSequential(RealtimeEvents.DISCONNECT, any())
+        sideband.disconnect(request)
+      }
+    }
+
+  @Test
+  fun `disconnect preserves hangup errors other than timeout`() =
+    runTest {
+      val request = SidebandDisconnectRequest("call-1", "crm", "chat-1")
+      val failure = IllegalStateException("hangup failed")
+      coEvery { events.publishSequential(RealtimeEvents.DISCONNECT, any()) } just Runs
+      coEvery { sideband.disconnect(request) } throws failure
+
+      val thrown = assertFailsWith<IllegalStateException> { handler().disconnect(request) }
+
+      assertEquals(failure.message, thrown.message)
     }
 
   @Test

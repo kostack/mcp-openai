@@ -13,8 +13,10 @@ import io.github.kostack.mcp_openai.service.OpenAiHttpService
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.slf4j.LoggerFactory
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.bodyValueAndAwait
 import org.springframework.web.reactive.function.server.buildAndAwait
@@ -76,7 +78,11 @@ class RealtimeSidebandHandlerImpl(
       throw failure
     }
     withContext(NonCancellable) {
-      withTimeout(5_000.milliseconds) { sidebandService.disconnect(request) }
+      try {
+        withTimeout(5_000.milliseconds) { sidebandService.disconnect(request) }
+      } catch (failure: TimeoutCancellationException) {
+        log.warn("Timed out hanging up sideband callId={}", request.callId, failure)
+      }
     }
 
     return ServerResponse
@@ -95,5 +101,9 @@ class RealtimeSidebandHandlerImpl(
     } catch (cleanupFailure: Throwable) {
       if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
     }
+  }
+
+  companion object {
+    private val log = LoggerFactory.getLogger(RealtimeSidebandHandlerImpl::class.java)
   }
 }

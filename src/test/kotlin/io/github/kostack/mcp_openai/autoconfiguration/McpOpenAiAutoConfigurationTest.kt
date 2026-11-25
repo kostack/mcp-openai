@@ -23,6 +23,8 @@ import io.github.kostack.mcp_openai.service.RealtimeEventHandler
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
@@ -33,17 +35,23 @@ import org.springframework.boot.context.properties.bind.Bindable
 import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpHeaders
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.server.RouterFunction
 import org.springframework.web.reactive.function.server.RouterFunctions
 import org.springframework.web.reactive.function.server.ServerResponse
+import org.springframework.web.reactive.socket.WebSocketHandler
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient
 import org.springframework.web.reactive.socket.client.WebSocketClient
+import reactor.core.publisher.Mono
 import tools.jackson.databind.ObjectMapper
+import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class McpOpenAiAutoConfigurationTest {
   private val contextRunner =
@@ -314,6 +322,50 @@ class McpOpenAiAutoConfigurationTest {
             .containsExactly(mapOf("id" to "item-1", "role" to "user", "content" to "hello"))
         }
       }
+  }
+
+  @Test
+  fun `shutdown hangs up active calls before lifecycle resources stop`() {
+    val connected = CountDownLatch(1)
+    val resourcesRunning = AtomicBoolean(false)
+    val hangupCompleted = AtomicBoolean(false)
+    val httpService = mockk<OpenAiHttpService>()
+    coEvery { httpService.disconnect("call-1") } coAnswers {
+      assertThat(resourcesRunning.get()).isTrue()
+      hangupCompleted.set(true)
+    }
+    val websocketClient = mockk<WebSocketClient>()
+    every {
+      websocketClient.execute(any<URI>(), any<HttpHeaders>(), any<WebSocketHandler>())
+    } returns Mono.never<Void>().doOnSubscribe { connected.countDown() }
+    val resources =
+      object : SmartLifecycle {
+        override fun start() {
+          resourcesRunning.set(true)
+        }
+
+        override fun stop() {
+          resourcesRunning.set(false)
+        }
+
+        override fun isRunning(): Boolean = resourcesRunning.get()
+      }
+
+    contextRunner
+      .withBean(OpenAiHttpService::class.java, { httpService })
+      .withBean(WebSocketClient::class.java, { websocketClient })
+      .withBean("networkResources", SmartLifecycle::class.java, { resources })
+      .run { context ->
+        assertThat(context).hasNotFailed()
+        context.getBean(RealtimeSidebandService::class.java).connect(
+          SidebandConnectRequest("call-1", "crm", "chat", "en")
+        )
+        assertThat(connected.await(5, TimeUnit.SECONDS)).isTrue()
+      }
+
+    assertThat(hangupCompleted.get()).isTrue()
+    assertThat(resourcesRunning.get()).isFalse()
+    coVerify(exactly = 1) { httpService.disconnect("call-1") }
   }
 
   @Test
