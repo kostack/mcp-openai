@@ -92,6 +92,14 @@ Available properties:
 | `model` | `gpt-realtime-mini` | Realtime model used when creating a session. |
 | `transcription-model` | `gpt-realtime-whisper` | Audio transcription model used for input audio. |
 | `enable-audio` | `false` | Application-level flag you can use when deciding whether to allow audio requests. |
+| `outbound-buffer-capacity` | `256` | Maximum queued outbound messages per sideband connection. Overflow fails the outbound stream so the connection can be cleaned up. |
+| `tool-max-concurrent-calls` | `16` | Maximum tool calls executing across all sessions. Excess calls receive a capacity error result without being queued. |
+| `tool-timeout-millis` | `30000` | Deadline for each tool execution. Timeout returns an error result. Tools must cooperate with coroutine cancellation. |
+
+All limits must be positive.
+
+The fixture frontend releases local media and WebRTC resources when setup fails or a connection closes.
+Its lifecycle regression tests run with `node scripts/rtc.test.cjs`.
 
 ## Core Concepts
 

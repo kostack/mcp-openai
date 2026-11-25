@@ -51,6 +51,9 @@
   let assistantAudioPlaying = false;
   let pushToTalkActive = false;
   let realtimeConnected = false;
+  let connecting = false;
+  let disconnectPromise = null;
+  let connectionController = null;
 
   const NAMESPACE = "default";
   const channel = "channel-1";
@@ -454,84 +457,130 @@
     }
   }
 
+  function updateConnectionControls() {
+    document.getElementById("connectBtn").disabled = connecting || !!disconnectPromise || realtimeConnected;
+    document.getElementById("disconnectBtn").disabled = !realtimeConnected || !!disconnectPromise;
+    document.getElementById("audioCheckbox").disabled = connecting || !!disconnectPromise || realtimeConnected;
+    updateInputControls();
+  }
+
   async function connectRealtime() {
+    if (connecting || disconnectPromise || pc) return;
+    connecting = true;
+    connectionController = new AbortController();
+    const controller = connectionController;
+    updateConnectionControls();
     addMessage("system", "Creating session...");
 
-    pc = new RTCPeerConnection();
-
-    if (AUDIO_ENABLED()) {
-      audioEl = document.createElement("audio");
-      audioEl.autoplay = true;
-
-      pc.ontrack = (event) => {
-        audioEl.srcObject = event.streams[0];
+    try {
+      pc = new RTCPeerConnection();
+      const peer = pc;
+      peer.onconnectionstatechange = () => {
+        if (pc === peer && ["failed", "closed"].includes(peer.connectionState)) {
+          disconnectRealtime().catch((error) => addMessage("system", "Disconnect error: " + error.message));
+        }
       };
 
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+      if (AUDIO_ENABLED()) {
+        audioEl = document.createElement("audio");
+        audioEl.autoplay = true;
+
+        pc.ontrack = (event) => {
+          audioEl.srcObject = event.streams[0];
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+
+        if (pc !== peer) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error("Connection cancelled");
         }
+        localStream = stream;
+        setMicrophoneEnabled(false);
+
+        for (const track of localStream.getTracks()) {
+          pc.addTrack(track, localStream);
+        }
+      } else {
+        pc.addTransceiver("audio", { direction: "recvonly" });
+      }
+
+      dc = pc.createDataChannel("oai-events");
+
+      dc.onopen = () => {
+        addMessage("system", "Data channel connected");
+        updateInputControls();
+      };
+
+      const dataChannel = dc;
+      dc.onmessage = handleRealtimeEvent;
+      dc.onclose = () => {
+        if (dc === dataChannel) {
+          disconnectRealtime().catch((error) => addMessage("system", "Disconnect error: " + error.message));
+        }
+      };
+
+      dc.onerror = (event) => {
+        console.error("Data channel error:", event);
+        addMessage("system", "Data channel error");
+        if (dc === dataChannel) {
+          disconnectRealtime().catch((error) => addMessage("system", "Disconnect error: " + error.message));
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const callResponse = await fetch("/api/realtime/calls", {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + authToken
+        },
+        body: JSON.stringify({
+          sdp: offer.sdp,
+          namespace: NAMESPACE,
+          channel,
+          audioEnabled: AUDIO_ENABLED(),
+          language: LANGUAGE
+        })
       });
 
-      setMicrophoneEnabled(false);
-
-      for (const track of localStream.getTracks()) {
-        pc.addTrack(track, localStream);
+      if (!callResponse.ok) {
+        throw new Error(await callResponse.text());
       }
-    } else {
-      pc.addTransceiver("audio", { direction: "recvonly" });
+
+      const call = await callResponse.json();
+      if (pc !== peer) {
+        await hangupCall(call.callId);
+        throw new Error("Connection cancelled");
+      }
+      callId = call.callId;
+      await pc.setRemoteDescription({ type: "answer", sdp: call.sdp });
+
+      if (pc !== peer) throw new Error("Connection cancelled");
+      realtimeConnected = true;
+      updateConnectionControls();
+
+      addMessage("system", AUDIO_ENABLED() ? "Connected. Click Start talking to enable the microphone, then click Stop talking to mute it." : "Connected");
+    } catch (error) {
+      try {
+        await disconnectRealtime();
+      } catch (cleanupError) {
+        console.error("Connection cleanup failed:", cleanupError);
+      }
+      throw error;
+    } finally {
+      connecting = false;
+      updateConnectionControls();
     }
-
-    dc = pc.createDataChannel("oai-events");
-
-    dc.onopen = () => {
-      addMessage("system", "Data channel connected");
-      updateInputControls();
-    };
-
-    dc.onmessage = handleRealtimeEvent;
-
-    dc.onerror = (event) => {
-      console.error("Data channel error:", event);
-      addMessage("system", "Data channel error");
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const callResponse = await fetch("/api/realtime/calls", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + authToken
-      },
-      body: JSON.stringify({
-        sdp: offer.sdp,
-        namespace: NAMESPACE,
-        channel,
-        audioEnabled: AUDIO_ENABLED(),
-        language: LANGUAGE
-      })
-    });
-
-    if (!callResponse.ok) {
-      throw new Error(await callResponse.text());
-    }
-
-    const call = await callResponse.json();
-    callId = call.callId;
-    await pc.setRemoteDescription({ type: "answer", sdp: call.sdp });
-
-    realtimeConnected = true;
-
-    document.getElementById("connectBtn").disabled = true;
-    document.getElementById("disconnectBtn").disabled = false;
-    document.getElementById("audioCheckbox").disabled = true;
-    updateInputControls();
-
-    addMessage("system", AUDIO_ENABLED() ? "Connected. Click Start talking to enable the microphone, then click Stop talking to mute it." : "Connected");
   }
 
   function sendTextMessage() {
@@ -564,31 +613,34 @@
     input.value = "";
   }
 
-  async function disconnectRealtime() {
-    addMessage("system", "Disconnecting...");
+  async function hangupCall(id) {
+    const response = await fetch("/api/realtime/disconnect", {
+      signal: AbortSignal.timeout(5_000),
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + authToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ callId: id, namespace: NAMESPACE, channel })
+    });
+    if (!response.ok) throw new Error("Hangup failed: HTTP " + response.status);
+  }
 
-    if (callId) {
-      await fetch("/api/realtime/disconnect", {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer " + authToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-              callId,
-              namespace: NAMESPACE,
-              channel
-            }
-        )
-      }).catch(console.error);
-    }
-
+  function releaseRealtimeResources() {
+    connectionController?.abort();
+    connectionController = null;
     if (dc) {
+      dc.onopen = null;
+      dc.onmessage = null;
+      dc.onerror = null;
+      dc.onclose = null;
       dc.close();
       dc = null;
     }
 
     if (pc) {
+      pc.onconnectionstatechange = null;
+      pc.ontrack = null;
       pc.close();
       pc = null;
     }
@@ -596,6 +648,13 @@
     if (localStream) {
       for (const track of localStream.getTracks()) track.stop();
       localStream = null;
+    }
+
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.srcObject = null;
+      audioEl.remove();
+      audioEl = null;
     }
 
     callId = null;
@@ -608,12 +667,23 @@
     clearPendingVoiceUserMessage();
     resetAssistantStreaming();
 
-    document.getElementById("connectBtn").disabled = false;
-    document.getElementById("disconnectBtn").disabled = true;
-    document.getElementById("audioCheckbox").disabled = false;
-    updateInputControls();
+    updateConnectionControls();
+  }
 
-    addMessage("system", "Disconnected");
+  async function disconnectRealtime() {
+    if (disconnectPromise) return disconnectPromise;
+    const id = callId;
+    addMessage("system", "Disconnecting...");
+    releaseRealtimeResources();
+    disconnectPromise = Promise.resolve().then(() => id ? hangupCall(id) : undefined);
+    updateConnectionControls();
+    try {
+      await disconnectPromise;
+    } finally {
+      disconnectPromise = null;
+      updateConnectionControls();
+      addMessage("system", "Disconnected");
+    }
   }
 
   document.getElementById("connectBtn").onclick = () => {

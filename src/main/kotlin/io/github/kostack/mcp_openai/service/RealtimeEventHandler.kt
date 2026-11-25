@@ -18,20 +18,30 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import tools.jackson.databind.ObjectMapper
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.milliseconds
 
 class RealtimeEventHandler(
   private val objectMapper: ObjectMapper,
   private val toolDispatcher: ToolDispatcher,
   private val websocketSessionRegistry: WebSocketSessionRegistry,
   private val suspendDispatcher: SuspendDispatcher,
-  toolDispatcherContext: CoroutineDispatcher = Dispatchers.IO
+  toolDispatcherContext: CoroutineDispatcher = Dispatchers.IO,
+  maxConcurrentCalls: Int = 16,
+  private val toolTimeoutMillis: Long = 30_000
 ) {
   private val supervisorJob = SupervisorJob()
   private val scope = CoroutineScope(supervisorJob + toolDispatcherContext)
   private val toolCallScopes = ConcurrentHashMap<String, CoroutineScope>()
+  private val toolPermits = Semaphore(maxConcurrentCalls)
+
+  init {
+    require(toolTimeoutMillis > 0) { "Tool timeout must be positive" }
+  }
 
   suspend fun handleInbound(
     event: RealtimeEvent,
@@ -39,19 +49,30 @@ class RealtimeEventHandler(
   ) {
     when (event.type) {
       FUNCTION_CALL_ARGUMENTS_DONE -> {
-        toolCallScope(request.callId).launch {
-          try {
-            handleFunctionCall(event.name, event.callId, event.arguments, request)
-          } catch (e: CancellationException) {
-            throw e
-          } catch (e: Exception) {
-            log.error(
-              "Realtime tool call failed callId={}, toolCallId={}",
-              request.callId,
-              event.callId,
-              e
-            )
-          }
+        if (event.name == null || event.callId == null) return
+        if (!toolPermits.tryAcquire()) {
+          sendToolResult(event.callId, ToolResult(result = "Tool execution capacity exceeded"), request)
+          return
+        }
+        try {
+          toolCallScope(request.callId)
+            .launch {
+              try {
+                handleFunctionCall(event.name, event.callId, event.arguments, request)
+              } catch (e: CancellationException) {
+                throw e
+              } catch (e: Exception) {
+                log.error(
+                  "Realtime tool call failed callId={}, toolCallId={}",
+                  request.callId,
+                  event.callId,
+                  e
+                )
+              }
+            }.invokeOnCompletion { toolPermits.release() }
+        } catch (failure: Throwable) {
+          toolPermits.release()
+          throw failure
         }
       }
 
@@ -111,7 +132,10 @@ class RealtimeEventHandler(
         toolCallId = toolCallId,
         rawRequest = rawArguments
       )
-    val toolResult = toolDispatcher.execute(toolName, context)
+    val toolResult =
+      withTimeoutOrNull(toolTimeoutMillis.milliseconds) {
+        toolDispatcher.execute(toolName, context)
+      } ?: ToolResult(result = "Tool execution timed out")
 
     log.info(
       "Tool call result: name={}, callId={}, channel={}, sessionCallId={}",
@@ -121,6 +145,14 @@ class RealtimeEventHandler(
       request.callId
     )
 
+    sendToolResult(toolCallId, toolResult, request)
+  }
+
+  private fun sendToolResult(
+    toolCallId: String,
+    toolResult: ToolResult,
+    request: SidebandConnectRequest
+  ) {
     val resultOutput =
       if (toolResult.mode == ToolResult.ToolResultMode.DIRECT) {
         objectMapper.writeValueAsString(

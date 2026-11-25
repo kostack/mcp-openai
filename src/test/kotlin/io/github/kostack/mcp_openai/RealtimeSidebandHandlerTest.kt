@@ -163,6 +163,53 @@ class RealtimeSidebandHandlerTest {
     verify { sideband wasNot Called }
   }
 
+  @Test
+  fun `connect listener failure hangs up created call and preserves original error`() =
+    runTest {
+      val failure = IllegalStateException("connect listener failed")
+      val cleanupFailure = IllegalArgumentException("hangup failed")
+      coEvery { events.publishSequential(RealtimeEvents.PRE_CONNECT, any()) } just Runs
+      every { tools.getDefinitions("crm") } returns emptyList()
+      coEvery { http.createCall(any(), any(), any(), any()) } returns call
+      coEvery { events.publishSequential(RealtimeEvents.CONNECT, any()) } throws failure
+      coEvery { sideband.disconnect(any()) } throws cleanupFailure
+
+      assertSame(failure, assertFailsWith<IllegalStateException> { handler().createCall(request) })
+
+      coVerify(exactly = 1) { sideband.disconnect(SidebandDisconnectRequest("call-1", "crm", "chat-1")) }
+      assertEquals(cleanupFailure.message, failure.suppressed.single().message)
+      assertEquals(cleanupFailure::class, failure.suppressed.single()::class)
+      verify(exactly = 0) { sideband.connect(any()) }
+    }
+
+  @Test
+  fun `sideband attachment failure hangs up created call`() =
+    runTest {
+      val failure = IllegalStateException("attach failed")
+      coEvery { events.publishSequential(any(), any()) } just Runs
+      every { tools.getDefinitions("crm") } returns emptyList()
+      coEvery { http.createCall(any(), any(), any(), any()) } returns call
+      every { sideband.connect(any()) } throws failure
+      coEvery { sideband.disconnect(any()) } just Runs
+
+      assertSame(failure, assertFailsWith<IllegalStateException> { handler().createCall(request) })
+
+      coVerify(exactly = 1) { sideband.disconnect(SidebandDisconnectRequest("call-1", "crm", "chat-1")) }
+    }
+
+  @Test
+  fun `disconnect listener cancellation still hangs up call`() =
+    runTest {
+      val failure = kotlinx.coroutines.CancellationException("listener cancelled")
+      val request = SidebandDisconnectRequest("call-1", "crm", "chat-1")
+      coEvery { events.publishSequential(RealtimeEvents.DISCONNECT, any()) } throws failure
+      coEvery { sideband.disconnect(request) } just Runs
+
+      assertSame(failure, assertFailsWith<kotlinx.coroutines.CancellationException> { handler().disconnect(request) })
+
+      coVerify(exactly = 1) { sideband.disconnect(request) }
+    }
+
   private fun handler(properties: McpProperties = McpProperties()) =
     RealtimeSidebandHandler(sideband, http, events, tools, properties)
 }

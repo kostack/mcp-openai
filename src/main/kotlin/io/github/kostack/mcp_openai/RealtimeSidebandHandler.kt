@@ -12,9 +12,13 @@ import io.github.kostack.mcp_openai.event.RealtimePreConnectEvent
 import io.github.kostack.mcp_openai.service.OpenAiHttpService
 import io.github.kostack.mcp_openai.service.RealtimeSidebandService
 import io.github.kostack.mcp_openai.tool.ToolDispatcher
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.bodyValueAndAwait
 import org.springframework.web.reactive.function.server.buildAndAwait
+import kotlin.time.Duration.Companion.milliseconds
 
 class RealtimeSidebandHandler(
   private val sidebandService: RealtimeSidebandService,
@@ -50,21 +54,46 @@ class RealtimeSidebandHandler(
         audioEnabled = properties.enableAudio && settings.audioEnabled
       )
 
-    suspendDispatcher.publishSequential(
-      RealtimeEvents.CONNECT,
-      RealtimeConnectEvent(sidebandConnectionRequest)
-    )
-    sidebandService.connect(sidebandConnectionRequest)
+    try {
+      suspendDispatcher.publishSequential(
+        RealtimeEvents.CONNECT,
+        RealtimeConnectEvent(sidebandConnectionRequest)
+      )
+      sidebandService.connect(sidebandConnectionRequest)
 
-    return ServerResponse.ok().bodyValueAndAwait(call)
+      return ServerResponse.ok().bodyValueAndAwait(call)
+    } catch (failure: Throwable) {
+      cleanup(SidebandDisconnectRequest(call.callId, settings.namespace, settings.channel), failure)
+      throw failure
+    }
   }
 
   suspend fun disconnect(request: SidebandDisconnectRequest): ServerResponse {
-    suspendDispatcher.publishSequential(RealtimeEvents.DISCONNECT, RealtimeDisconnectEvent(request))
-    sidebandService.disconnect(request)
+    try {
+      suspendDispatcher.publishSequential(RealtimeEvents.DISCONNECT, RealtimeDisconnectEvent(request))
+    } catch (failure: Throwable) {
+      cleanup(request, failure)
+      throw failure
+    }
+    withContext(NonCancellable) {
+      withTimeout(5_000.milliseconds) { sidebandService.disconnect(request) }
+    }
 
     return ServerResponse
       .noContent()
       .buildAndAwait()
+  }
+
+  private suspend fun cleanup(
+    request: SidebandDisconnectRequest,
+    failure: Throwable
+  ) {
+    try {
+      withContext(NonCancellable) {
+        withTimeout(5_000.milliseconds) { sidebandService.disconnect(request) }
+      }
+    } catch (cleanupFailure: Throwable) {
+      if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+    }
   }
 }

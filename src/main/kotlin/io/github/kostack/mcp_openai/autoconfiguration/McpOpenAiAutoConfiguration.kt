@@ -59,8 +59,10 @@ class McpOpenAiAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean(name = ["webSocketSessionRegistry"])
-  fun webSocketSessionRegistry(objectMapper: ObjectMapper): WebSocketSessionRegistry =
-    WebSocketSessionRegistry(objectMapper)
+  fun webSocketSessionRegistry(
+    objectMapper: ObjectMapper,
+    properties: McpProperties
+  ): WebSocketSessionRegistry = WebSocketSessionRegistry(objectMapper, properties.outboundBufferCapacity)
 
   @Bean
   @ConditionalOnMissingBean(ConversationStore::class)
@@ -83,13 +85,16 @@ class McpOpenAiAutoConfiguration {
     objectMapper: ObjectMapper,
     toolDispatcher: ToolDispatcher,
     webSocketSessionRegistry: WebSocketSessionRegistry,
-    suspendDispatcher: SuspendDispatcher
+    suspendDispatcher: SuspendDispatcher,
+    properties: McpProperties
   ): RealtimeEventHandler =
     RealtimeEventHandler(
       objectMapper,
       toolDispatcher,
       webSocketSessionRegistry,
-      suspendDispatcher
+      suspendDispatcher,
+      maxConcurrentCalls = properties.toolMaxConcurrentCalls,
+      toolTimeoutMillis = properties.toolTimeoutMillis
     )
 
   @Bean

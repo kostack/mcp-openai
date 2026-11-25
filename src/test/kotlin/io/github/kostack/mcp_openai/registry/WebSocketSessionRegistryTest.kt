@@ -4,8 +4,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.web.reactive.socket.WebSocketMessage
 import org.springframework.web.reactive.socket.WebSocketSession
+import reactor.test.StepVerifier
 import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -60,4 +62,28 @@ class WebSocketSessionRegistryTest {
       kotlin.test.assertEquals(listOf(jsonMessage, secondJsonMessage), messages.get())
       verify(exactly = 0) { session.send(any()) }
     }
+
+  @Test
+  fun `full outbound buffer rejects further messages and fails the connection`() {
+    val registry = WebSocketSessionRegistry(ObjectMapper(), outboundBufferCapacity = 1)
+    val session = mockk<WebSocketSession>()
+    every { session.isOpen } returns true
+    every { session.textMessage(any()) } answers {
+      WebSocketMessage(
+        WebSocketMessage.Type.TEXT,
+        DefaultDataBufferFactory.sharedInstance.wrap(firstArg<String>().toByteArray())
+      )
+    }
+    val outbound = registry.put("call-123", session)
+    assertTrue(registry.sendJson("call-123", mapOf("type" to "first")))
+    assertFalse(registry.sendJson("call-123", mapOf("type" to "overflow")))
+    assertFalse(registry.sendJson("call-123", mapOf("type" to "rejected")))
+    kotlin.test.assertNull(registry.get("call-123"))
+
+    StepVerifier
+      .create(outbound)
+      .expectNextCount(1)
+      .expectError(IllegalStateException::class.java)
+      .verify()
+  }
 }

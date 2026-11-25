@@ -26,6 +26,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import tools.jackson.databind.ObjectMapper
@@ -432,13 +433,87 @@ class RealtimeEventHandlerTest {
       verify { websocketSessionRegistry wasNot Called }
     }
 
-  private fun TestScope.handler(): RealtimeEventHandler =
+  @Test
+  fun `capacity rejects excess calls without queueing and cancellation releases permits`() =
+    runTest {
+      val results = mutableListOf<ToolResult>()
+      every { objectMapper.writeValueAsString(capture(results)) } returns "busy"
+      every { websocketSessionRegistry.sendJson(any(), any()) } returns true
+      coEvery { toolDispatcher.execute(any(), any()) } coAnswers { awaitCancellation() }
+      val handler = handler(maxConcurrentCalls = 1)
+      val event = RealtimeEvent(type = "response.function_call_arguments.done", name = "waiting", callId = "tool-1")
+      handler.handleInbound(event, request())
+      handler.handleInbound(event.copy(callId = "tool-2"), request())
+      runCurrent()
+
+      assertEquals(listOf(ToolResult(result = "Tool execution capacity exceeded")), results)
+      coVerify(exactly = 1) { toolDispatcher.execute(any(), any()) }
+
+      handler.cancel(request().callId)
+      runCurrent()
+      handler.handleInbound(event.copy(callId = "tool-3"), request())
+      runCurrent()
+      coVerify(exactly = 2) { toolDispatcher.execute(any(), any()) }
+    }
+
+  @Test
+  fun `tool timeout sends error result and releases execution capacity`() =
+    runTest {
+      val results = mutableListOf<ToolResult>()
+      var cancelled = false
+      every { objectMapper.writeValueAsString(capture(results)) } returns "timeout"
+      every { websocketSessionRegistry.sendJson(any(), any()) } returns true
+      coEvery { toolDispatcher.execute(any(), any()) } coAnswers {
+        try {
+          awaitCancellation()
+        } finally {
+          cancelled = true
+        }
+      }
+      val handler = handler(maxConcurrentCalls = 1, toolTimeoutMillis = 100)
+      val event = RealtimeEvent(type = "response.function_call_arguments.done", name = "waiting", callId = "tool-1")
+      handler.handleInbound(event, request())
+      runCurrent()
+      advanceTimeBy(100)
+      runCurrent()
+
+      kotlin.test.assertTrue(cancelled)
+      assertEquals(listOf(ToolResult(result = "Tool execution timed out")), results)
+      verify(exactly = 2) { websocketSessionRegistry.sendJson(request().callId, any()) }
+
+      handler.handleInbound(event.copy(callId = "tool-2"), request())
+      runCurrent()
+      coVerify(exactly = 2) { toolDispatcher.execute(any(), any()) }
+    }
+
+  @Test
+  fun `cancelling before a tool starts releases its permit`() =
+    runTest {
+      coEvery { toolDispatcher.execute(any(), any()) } coAnswers { awaitCancellation() }
+      val handler = handler(maxConcurrentCalls = 1)
+      val event = RealtimeEvent(type = "response.function_call_arguments.done", name = "waiting", callId = "tool-1")
+      handler.handleInbound(event, request())
+      handler.cancel(request().callId)
+      runCurrent()
+      handler.handleInbound(event, request().copy(callId = "call-456"))
+      runCurrent()
+
+      coVerify(exactly = 1) { toolDispatcher.execute(any(), any()) }
+      verify { websocketSessionRegistry wasNot Called }
+    }
+
+  private fun TestScope.handler(
+    maxConcurrentCalls: Int = 16,
+    toolTimeoutMillis: Long = 30_000
+  ): RealtimeEventHandler =
     RealtimeEventHandler(
       objectMapper = objectMapper,
       toolDispatcher = toolDispatcher,
       websocketSessionRegistry = websocketSessionRegistry,
       suspendDispatcher = suspendDispatcher,
-      toolDispatcherContext = StandardTestDispatcher(testScheduler)
+      toolDispatcherContext = StandardTestDispatcher(testScheduler),
+      maxConcurrentCalls = maxConcurrentCalls,
+      toolTimeoutMillis = toolTimeoutMillis
     ).also { handlers.add(it) }
 
   private fun request(audioEnabled: Boolean = false): SidebandConnectRequest =

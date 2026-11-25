@@ -11,5 +11,8 @@ data class McpProperties(
   var model: String = "gpt-realtime-mini",
   var transcriptionModel: String = "gpt-realtime-whisper",
   var enableAudio: Boolean = false,
-  var callsUrl: String = "https://api.openai.com/v1/realtime/calls"
+  var callsUrl: String = "https://api.openai.com/v1/realtime/calls",
+  var outboundBufferCapacity: Int = 256,
+  var toolMaxConcurrentCalls: Int = 16,
+  var toolTimeoutMillis: Long = 30_000
 )
