@@ -35,7 +35,7 @@ dependencies {
   kapt(springBootBom)
   kapt("org.springframework.boot:spring-boot-configuration-processor")
 
-  val springAiBom = platform("org.springframework.ai:spring-ai-bom:2.0.0")
+  val springAiBom = platform("org.springframework.ai:spring-ai-bom:2.1.0")
   compileOnly(springAiBom)
   testImplementation(springAiBom)
   testFixturesImplementation(springAiBom)
