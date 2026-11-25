@@ -1,25 +1,24 @@
-import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
-import org.gradle.testing.jacoco.tasks.JacocoReport
-
 plugins {
-  kotlin("jvm") version "2.3.0"
-  kotlin("plugin.spring") version "2.3.0"
-  kotlin("plugin.serialization") version "2.3.0"
-  id("org.springframework.boot") version "4.1.0"
-  id("io.spring.dependency-management") version "1.1.7"
+  kotlin("jvm")
+  kotlin("kapt")
+  kotlin("plugin.spring")
+  kotlin("plugin.serialization")
   id("com.vanniktech.maven.publish") version "0.33.0"
   id("java-test-fixtures")
-  id("com.diffplug.spotless") version "8.4.0"
+  id("com.diffplug.spotless") version "8.11.0"
   jacoco
 }
 
+val springBootVersion = "4.1.2"
+val packageId = "mcp-openai"
+val packageName = "MCP OpenAI"
 group = "io.github.kostack"
-version = providers.gradleProperty("projectVersion").getOrElse("1.0.0")
-description = "MCP OpenAI"
+version = providers.gradleProperty("projectVersion").getOrElse("1.3.0")
+description = packageName
 
 java {
   toolchain {
-    languageVersion = JavaLanguageVersion.of(23)
+    languageVersion = JavaLanguageVersion.of(25)
   }
 }
 
@@ -27,58 +26,65 @@ repositories {
   mavenCentral()
 }
 
-dependencyManagement {
-  imports {
-    mavenBom(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
-  }
-}
-
 dependencies {
-  // API
-  api("org.springframework.boot:spring-boot-starter-webflux")
-  api("io.github.kostack:event-dispatcher:1.2.2")
+  // Build and tests only: the Spring Boot BOM manages all versions below and is not published.
+  val springBootBom = platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion")
+  compileOnly(springBootBom)
+  testImplementation(springBootBom)
+  testFixturesImplementation(springBootBom)
+  kapt(springBootBom)
+  kapt("org.springframework.boot:spring-boot-configuration-processor")
 
-  api(platform("org.springframework.ai:spring-ai-bom:2.0.0"))
-  api("org.springframework.ai:spring-ai-model")
+  val springAiBom = platform("org.springframework.ai:spring-ai-bom:2.0.0")
+  compileOnly(springAiBom)
+  testImplementation(springAiBom)
+  testFixturesImplementation(springAiBom)
 
-  // Kotlin
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
-  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+  // Provided by the consuming application; not published as dependencies.
+  listOf(
+    "org.springframework.boot:spring-boot-starter-webflux",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-reactor",
+    "org.jetbrains.kotlinx:kotlinx-serialization-json",
+    "org.springframework.ai:spring-ai-model",
+    "io.github.kostack:event-dispatcher:1.3.0"
+  ).forEach {
+    compileOnly(it)
+    testImplementation(it)
+    testFixturesImplementation(it)
+  }
 
-  // TestRuntimeOnly
-  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-  // TestImplementation
   testImplementation("org.springframework.boot:spring-boot-starter-test")
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
+  testImplementation("io.projectreactor:reactor-test")
   testImplementation("com.ninja-squad:springmockk:5.0.1")
   testImplementation("io.mockk:mockk:1.14.11")
-  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
   testImplementation(kotlin("test"))
-  testImplementation("io.projectreactor:reactor-test")
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-  // TestFixtures
   testFixturesImplementation(kotlin("stdlib"))
-  testFixturesImplementation("org.springframework.boot:spring-boot-starter-webflux")
+  testFixturesImplementation(kotlin("reflect"))
   testFixturesImplementation("org.springframework.boot:spring-boot-autoconfigure")
-  testFixturesImplementation("org.springframework.boot:spring-boot-configuration-processor")
-  testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
-  testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
-  testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
-  testFixturesImplementation(platform("org.springframework.ai:spring-ai-bom:2.0.0"))
-  testFixturesImplementation("org.springframework.ai:spring-ai-model")
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-freemarker")
-  testFixturesImplementation("io.github.kostack:event-dispatcher:1.2.2")
 }
 
 kotlin {
   compilerOptions {
+    javaParameters.set(true)
     freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
   }
 }
 
-tasks.withType<Test> {
-  useJUnitPlatform()
+// Test fixtures are for this project's tests only; don't publish them.
+(components["java"] as AdhocComponentWithVariants).apply {
+  withVariantsFromConfiguration(configurations["testFixturesApiElements"]) { skip() }
+  withVariantsFromConfiguration(configurations["testFixturesRuntimeElements"]) { skip() }
+}
+// The publish plugin adds the fixtures' sources variant late, so skip it after evaluation.
+afterEvaluate {
+  configurations.findByName("testFixturesSourcesElements")?.let {
+    (components["java"] as AdhocComponentWithVariants).withVariantsFromConfiguration(it) { skip() }
+  }
 }
 
 tasks.register("installGitHook") {
@@ -98,54 +104,43 @@ tasks.register("installGitHook") {
   }
 }
 
-tasks.named<Test>("test") {
+tasks.test {
   useJUnitPlatform()
-
-  finalizedBy(tasks.named("jacocoTestReport"))
-  reports.junitXml.required.set(true)
+  finalizedBy(tasks.jacocoTestReport)
+  // Needed by MockK's inline mocking agent on recent JDKs.
+  jvmArgs("-XX:+EnableDynamicAgentLoading")
 
   testLogging {
     events("passed", "skipped", "failed")
-    showStandardStreams = true
   }
-  jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
-tasks.named<JacocoReport>("jacocoTestReport") {
-  dependsOn(tasks.named("test"))
+tasks.jacocoTestReport {
+  dependsOn(tasks.test)
 
   reports {
-    xml.required.set(true)
-    html.required.set(true)
-    csv.required.set(false)
+    xml.required = true
+    html.required = true
+    csv.required = false
+    html.outputLocation = layout.buildDirectory.dir("jacocoHtml")
+    xml.outputLocation = layout.buildDirectory.file("jacocoReport.xml")
   }
-
-  reports.html.outputLocation.set(layout.buildDirectory.dir("jacocoHtml"))
-  reports.xml.outputLocation.set(layout.buildDirectory.file("jacocoReport.xml"))
 }
 
-tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+tasks.jacocoTestCoverageVerification {
+  dependsOn(tasks.test)
+
   violationRules {
     rule {
       limit {
-        minimum = "0.5".toBigDecimal()
+        minimum = "0.6".toBigDecimal()
       }
     }
   }
 }
 
-tasks.named("check") {
-  dependsOn(tasks.named("jacocoTestCoverageVerification"))
-  dependsOn(tasks.named("spotlessCheck"))
-  dependsOn(tasks.named("test"))
-}
-
-tasks.named("bootJar") {
-  enabled = false
-}
-
-tasks.named("jar") {
-  enabled = true
+tasks.check {
+  dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 spotless {
@@ -165,34 +160,34 @@ mavenPublishing {
 
   coordinates(
     groupId = group.toString(),
-    artifactId = "mcp-openai",
+    artifactId = packageId,
     version = version.toString()
   )
 
   pom {
-    name.set("MCP OpenAI")
-    description.set(project.description)
-    url.set("https://github.com/kostack/mcp-openai")
+    name = packageName
+    description = project.description
+    url = "https://github.com/kostack/$packageId"
 
     licenses {
       license {
-        name.set("MIT License")
-        url.set("https://opensource.org/licenses/MIT")
+        name = "MIT License"
+        url = "https://opensource.org/licenses/MIT"
       }
     }
 
     developers {
       developer {
-        id.set("zender")
-        name.set("Nikolay Georgiev")
-        url.set("https://github.com/zender")
+        id = "zender"
+        name = "Nikolay Georgiev"
+        url = "https://github.com/zender"
       }
     }
 
     scm {
-      connection.set("scm:git:git://github.com/kostack/mcp-openai.git")
-      developerConnection.set("scm:git:ssh://github.com/kostack/mcp-openai.git")
-      url.set("https://github.com/kostack/mcp-openai")
+      connection = "scm:git:git://github.com/kostack/$packageId.git"
+      developerConnection = "scm:git:ssh://github.com/kostack/$packageId.git"
+      url = "https://github.com/kostack/$packageId"
     }
   }
 }

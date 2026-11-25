@@ -6,11 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class McpProperties(
   var apiKey: String = "",
   var sidebandUrl: String = "wss://api.openai.com/v1/realtime",
-  val sidebandPrefix: String = "/api/realtime",
-  val sidebandMaxFramePayloadLength: Int =
-    1024 * 1024,
+  var sidebandPrefix: String = "/api/realtime",
+  var sidebandMaxFramePayloadLength: Int = 1024 * 1024,
   var model: String = "gpt-realtime-mini",
-  val transcriptionModel: String = "gpt-realtime-whisper",
-  val enableAudio: Boolean = false,
+  var transcriptionModel: String = "gpt-realtime-whisper",
+  var enableAudio: Boolean = false,
   var callsUrl: String = "https://api.openai.com/v1/realtime/calls"
 )

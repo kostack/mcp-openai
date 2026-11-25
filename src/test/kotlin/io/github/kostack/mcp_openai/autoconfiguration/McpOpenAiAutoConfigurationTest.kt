@@ -17,6 +17,9 @@ import io.github.kostack.mcp_openai.tool.ToolDispatcher
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.AutoConfigurations
+import org.springframework.boot.context.properties.bind.Bindable
+import org.springframework.boot.context.properties.bind.Binder
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -57,6 +60,56 @@ class McpOpenAiAutoConfigurationTest {
       val sidebandClient = context.getBean("realtimeSidebandWebSocketClient", ReactorNettyWebSocketClient::class.java)
       assertThat(sidebandClient.websocketClientSpec.maxFramePayloadLength()).isEqualTo(1024 * 1024)
     }
+  }
+
+  @Test
+  fun `auto configuration binds all configured properties`() {
+    contextRunner
+      .withPropertyValues(
+        "kostack-mcp.api-key=test-key",
+        "kostack-mcp.sideband-url=wss://example.com/realtime",
+        "kostack-mcp.sideband-prefix=/custom/realtime",
+        "kostack-mcp.sideband-max-frame-payload-length=2097152",
+        "kostack-mcp.model=test-model",
+        "kostack-mcp.transcription-model=test-transcription-model",
+        "kostack-mcp.enable-audio=true",
+        "kostack-mcp.calls-url=https://example.com/realtime/calls"
+      ).run { context ->
+        assertThat(context).hasNotFailed()
+        val properties = context.getBean(McpProperties::class.java)
+        assertThat(properties.apiKey).isEqualTo("test-key")
+        assertThat(properties.sidebandUrl).isEqualTo("wss://example.com/realtime")
+        assertThat(properties.sidebandPrefix).isEqualTo("/custom/realtime")
+        assertThat(properties.sidebandMaxFramePayloadLength).isEqualTo(2097152)
+        assertThat(properties.model).isEqualTo("test-model")
+        assertThat(properties.transcriptionModel).isEqualTo("test-transcription-model")
+        assertThat(properties.enableAudio).isTrue()
+        assertThat(properties.callsUrl).isEqualTo("https://example.com/realtime/calls")
+
+        val sidebandClient = context.getBean("realtimeSidebandWebSocketClient", ReactorNettyWebSocketClient::class.java)
+        assertThat(sidebandClient.websocketClientSpec.maxFramePayloadLength()).isEqualTo(2097152)
+      }
+  }
+
+  @Test
+  fun `properties support setter binding`() {
+    val properties = McpProperties()
+    val source =
+      MapConfigurationPropertySource(
+        mapOf(
+          "kostack-mcp.enable-audio" to "true",
+          "kostack-mcp.sideband-prefix" to "/custom/realtime",
+          "kostack-mcp.sideband-max-frame-payload-length" to "2097152",
+          "kostack-mcp.transcription-model" to "test-transcription-model"
+        )
+      )
+
+    Binder(source).bind("kostack-mcp", Bindable.ofInstance(properties))
+
+    assertThat(properties.enableAudio).isTrue()
+    assertThat(properties.sidebandPrefix).isEqualTo("/custom/realtime")
+    assertThat(properties.sidebandMaxFramePayloadLength).isEqualTo(2097152)
+    assertThat(properties.transcriptionModel).isEqualTo("test-transcription-model")
   }
 
   @Configuration(proxyBeanMethods = false)

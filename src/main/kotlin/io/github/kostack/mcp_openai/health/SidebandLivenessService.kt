@@ -25,14 +25,11 @@ class SidebandLivenessService(
   private val pingInterval: Duration = PING_INTERVAL,
   private val pongTimeout: Duration = PONG_TIMEOUT
 ) {
-  private val scope =
-    CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-  private val monitors =
-    ConcurrentHashMap<String, Job>()
+  private val monitors = ConcurrentHashMap<String, Job>()
 
-  private val statuses =
-    ConcurrentHashMap<String, SidebandStatus>()
+  private val statuses = ConcurrentHashMap<String, SidebandStatus>()
 
   fun start(
     callId: String,
@@ -52,8 +49,7 @@ class SidebandLivenessService(
         }
       }
 
-    val previous =
-      monitors.putIfAbsent(callId, job)
+    val previous = monitors.putIfAbsent(callId, job)
 
     if (previous != null) {
       job.cancel()
